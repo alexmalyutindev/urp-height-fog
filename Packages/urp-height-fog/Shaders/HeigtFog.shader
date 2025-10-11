@@ -7,7 +7,9 @@ Shader "Hidden/HeightFog"
         {
             Name "HeightFog OneShot"
 
+            Cull Off
             ZWrite Off
+            ZTest Always
             Blend SrcAlpha OneMinusSrcAlpha
 
             HLSLPROGRAM

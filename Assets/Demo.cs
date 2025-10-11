@@ -17,6 +17,11 @@ public class Demo : MonoBehaviour
     private long _samplesCountWithoutFog = 0;
     private bool _enableFog = true;
 
+    private void Start()
+    {
+        Application.targetFrameRate = 120;
+    }
+
     private void Update()
     {
         if (Time.frameCount < 120)

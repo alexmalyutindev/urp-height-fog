@@ -54,6 +54,7 @@ namespace HeightFog.Runtime
 
             using (new ProfilingScope(cmd, profilingSampler))
             {
+                // TODO: Replace strings with ids!
                 _props.SetColor("_FogColor", settings.Color.value);
 
                 var fogParams = new Vector4(
