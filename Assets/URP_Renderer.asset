@@ -65,4 +65,4 @@ MonoBehaviour:
   m_Name: HeightFogFeature
   m_EditorClassIdentifier: 
   m_Active: 1
-  HeightFogMaterial: {fileID: 0}
+  HeightFogMaterial: {fileID: 2100000, guid: 7fb05bba7337d47f292656e4ad52aa65, type: 2}

@@ -15,7 +15,7 @@ namespace HeightFog.Runtime
 
             _pass = new HeightFogPass(HeightFogMaterial)
             {
-                renderPassEvent = RenderPassEvent.AfterRenderingOpaques,
+                renderPassEvent = RenderPassEvent.AfterRenderingSkybox,
             };
         }
 
