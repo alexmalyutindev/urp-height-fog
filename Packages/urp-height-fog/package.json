@@ -1,0 +1,9 @@
+{
+  "name": "com.alexmalyutindev.urp-heigh-fog",
+  "version": "1.0.0",
+  "displayName": "URP Height Fog",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.render-pipelines.universal" : "17.0.4"
+  }
+}

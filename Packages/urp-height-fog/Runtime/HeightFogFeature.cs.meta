@@ -1,0 +1,12 @@
+fileFormatVersion: 2
+guid: 3513e5c5969e4c09938621aadbb5f828
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - HeightFogMaterial: {fileID: 2100000, guid: 7fb05bba7337d47f292656e4ad52aa65, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
