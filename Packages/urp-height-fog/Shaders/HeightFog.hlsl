@@ -1,4 +1,6 @@
-// цвет
+#ifndef HEIGHT_FOG_INCLUDED
+#define HEIGHT_FOG_INCLUDED
+
 float4 _FogColor;
 // Density, Distance, Height, HeightIntensity.
 float4 _FogParams;
@@ -10,23 +12,31 @@ float4 _FogParams;
 
 // #define HEIGHT_FOG_EXP
 #define HEIGHT_FOG_HYP
-#define HEIGHT_FOG_DISTFADE_HIGH
+#define HEIGHT_FOG_DISTFADE_RAY_CORRECTION
 
 half4 ComputeHeightFog(float3 positionWS)
 {
     float3 cameraPositionWS = GetCameraPositionWS();
 
     half fogThickness = distance(cameraPositionWS, positionWS);
-    half heightFactor = saturate((_FogPlaneY - positionWS.y) * _FogHeightIntensity);
 
-#if defined(HEIGHT_FOG_DISTFADE_HIGH)
+#if defined(HEIGHT_FOG_DISTFADE_RAY_CORRECTION)
+    // NOTE: Modifying end of ray, to apply correct height fade. At the same time it will add distance fade!
+    positionWS = cameraPositionWS + (positionWS - cameraPositionWS) / fogThickness * min(fogThickness, _FogDistance);
+    fogThickness = min(fogThickness, _FogDistance);
+    const half distanceFadeFactor = 1.0h;
+#elif defined(HEIGHT_FOG_DISTFADE_PLANE_INTESECTION)
+    // NOTE: Calculate ray-plane intersection and distanceFadeFactor that based on distance to this point.  
     float3 viewDirectionWS = positionWS - cameraPositionWS;
     float planeDistance = fogThickness / viewDirectionWS.y * min(0.0f, _FogPlaneY - cameraPositionWS.y);
     half distanceFadeFactor = smoothstep(_FogDistance, _FogDistance * 0.75h, planeDistance);
-#else // HEIGHT_FOG_DISTFADE_LOW
+#else // HEIGHT_FOG_DISTFADE_SIMPLE
     fogThickness = min(fogThickness, _FogDistance);
     half distanceFadeFactor = smoothstep(_FogDistance * 1.2f, _FogDistance * 0.8f, fogThickness);
 #endif
+
+    // NOTE: Computing global height factor, looks better and easier to control. 
+    half heightFactor = saturate((_FogPlaneY - positionWS.y) * _FogHeightIntensity);
 
 #if defined(HEIGHT_FOG_EXP)
     half fogFactor = 1.0h - exp(-fogThickness * _FogDensity);
@@ -36,3 +46,5 @@ half4 ComputeHeightFog(float3 positionWS)
 
     return half4(_FogColor.rgb, fogFactor * heightFactor * distanceFadeFactor);
 }
+
+#endif

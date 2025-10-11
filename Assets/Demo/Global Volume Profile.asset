@@ -24,13 +24,13 @@ MonoBehaviour:
     m_Value: 0.1
   Distance:
     m_OverrideState: 1
-    m_Value: 25
+    m_Value: 50
   Height:
     m_OverrideState: 1
     m_Value: 4.6
   HeightIntensity:
     m_OverrideState: 1
-    m_Value: 0.309
+    m_Value: 0.23
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
