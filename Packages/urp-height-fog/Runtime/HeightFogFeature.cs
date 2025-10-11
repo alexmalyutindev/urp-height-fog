@@ -46,13 +46,26 @@ namespace HeightFog.Runtime
         {
             if (_material == null) return;
 
-            // TODO: Use PP volume settings!
+            var settings = VolumeManager.instance.stack.GetComponent<HeightFogSettings>();
+            
+            if (!settings.Enable.value) return;
+
             var cmd = CommandBufferPool.Get();
 
             using (new ProfilingScope(cmd, profilingSampler))
             {
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
+
+                _props.SetColor("_FogColor", settings.Color.value);
+
+                var fogParams = new Vector4(
+                    settings.Density.value,
+                    settings.Distance.value,
+                    settings.Height.value,
+                    settings.HeightIntensity.value
+                );
+                _props.SetVector("_FogParams", fogParams);
 
                 BlitUtils.DrawTriangle(cmd, _material, 0, _props);
             }

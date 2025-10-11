@@ -17,6 +17,7 @@ Shader "Hidden/HeightFog"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Packages/com.alexmalyutindev.urp-heigh-fog/Shaders/HeightFog.hlsl"
 
             struct Attributes
             {
@@ -55,18 +56,10 @@ Shader "Hidden/HeightFog"
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                const half FogPlaneY = 5.0h;
-                
                 half sceneDepth = SampleSceneDepth(input.texcoord);
                 sceneDepth = LinearEyeDepth(sceneDepth, _ZBufferParams);
-
                 half3 positionWS = GetCameraPositionWS() + input.viewDirectionWS * sceneDepth;
-                half heightFactor = saturate((FogPlaneY - positionWS.y) * 0.2h);
-
-                sceneDepth = min(sceneDepth, 10.0h);
-
-                half fogFactor = 1.0h - exp(-sceneDepth * 0.1h);
-                return half4(1.0h, 1.0h, 1.0h, fogFactor * heightFactor);
+                return ComputeHeightFog(positionWS);
             }
             ENDHLSL
         }
