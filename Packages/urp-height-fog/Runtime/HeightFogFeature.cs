@@ -54,9 +54,6 @@ namespace HeightFog.Runtime
 
             using (new ProfilingScope(cmd, profilingSampler))
             {
-                context.ExecuteCommandBuffer(cmd);
-                cmd.Clear();
-
                 _props.SetColor("_FogColor", settings.Color.value);
 
                 var fogParams = new Vector4(
