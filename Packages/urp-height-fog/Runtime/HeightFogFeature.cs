@@ -54,6 +54,9 @@ namespace HeightFog.Runtime
 
             using (new ProfilingScope(cmd, profilingSampler))
             {
+                context.ExecuteCommandBuffer(cmd);
+                cmd.Clear();
+    
                 // TODO: Replace strings with ids!
                 _props.SetColor("_FogColor", settings.Color.value);
 

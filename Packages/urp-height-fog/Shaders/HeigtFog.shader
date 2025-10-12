@@ -13,6 +13,8 @@ Shader "Hidden/HeightFog"
             Blend SrcAlpha OneMinusSrcAlpha
 
             HLSLPROGRAM
+            #pragma target 3.5
+
             #pragma vertex Vertex
             #pragma fragment Fragment
 
@@ -30,8 +32,7 @@ Shader "Hidden/HeightFog"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 texcoord : TEXCOORD0;
-                float3 viewDirectionWS : TEXCOORD1;
+                half3 viewDirectionWS : TEXCOORD0;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -42,23 +43,21 @@ Shader "Hidden/HeightFog"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
                 float4 positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-                float2 uv = GetFullScreenTriangleTexCoord(input.vertexID);
-
-                float4 positionNDC = float4(positionCS.xy, half(0.0), half(1.0));
-                float4 positionVS = mul(unity_MatrixInvP, positionNDC);
-                positionVS /= positionVS.w;
-                positionVS.xyz /= abs(positionVS.z);
+                // NOTE: Optimized version of:
+                // float4 positionVS = mul(unity_MatrixInvP, float4(positionCS.xy, half(1.0h), half(1.0h)));
+                // positionVS /= positionVS.w;
+                // positionVS.xyz /= abs(positionVS.z);
+                half3 positionVS = half3(positionCS.xy * unity_MatrixInvP._m00_m11, -1.0h);
 
                 output.positionCS = positionCS;
-                output.texcoord = uv;
-                output.viewDirectionWS = mul(unity_MatrixInvV, half4(positionVS.xyz, 0.0f)).xyz;
+                output.viewDirectionWS = mul((half3x3)unity_MatrixInvV, positionVS.xyz);
 
                 return output;
             }
 
             half4 Fragment(Varyings input) : SV_Target
             {
-                half sceneDepth = SampleSceneDepth(input.texcoord);
+                half sceneDepth = LoadSceneDepth(input.positionCS.xy);
                 sceneDepth = LinearEyeDepth(sceneDepth, _ZBufferParams);
                 half3 positionWS = GetCameraPositionWS() + input.viewDirectionWS * sceneDepth;
                 return ComputeHeightFog(positionWS);

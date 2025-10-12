@@ -1,9 +1,9 @@
 #ifndef HEIGHT_FOG_INCLUDED
 #define HEIGHT_FOG_INCLUDED
 
-float4 _FogColor;
+half4 _FogColor;
 // Density, Distance, Height, HeightIntensity.
-float4 _FogParams;
+half4 _FogParams;
 
 #define _FogDensity (_FogParams.x)
 #define _FogDistance (_FogParams.y)
@@ -22,8 +22,9 @@ half4 ComputeHeightFog(float3 positionWS)
 
 #if defined(HEIGHT_FOG_DISTFADE_RAY_CORRECTION)
     // NOTE: Modifying end of ray, to apply correct height fade. At the same time it will add distance fade!
-    positionWS = cameraPositionWS + (positionWS - cameraPositionWS) / fogThickness * min(fogThickness, _FogDistance);
-    fogThickness = min(fogThickness, _FogDistance);
+    half clampedFogThickness = min(fogThickness, _FogDistance);
+    positionWS = cameraPositionWS + (positionWS - cameraPositionWS) * rcp(fogThickness) * clampedFogThickness;
+    fogThickness = clampedFogThickness;
     const half distanceFadeFactor = 1.0h;
 #elif defined(HEIGHT_FOG_DISTFADE_PLANE_INTESECTION)
     // NOTE: Calculate ray-plane intersection and distanceFadeFactor that based on distance to this point.  
@@ -39,9 +40,9 @@ half4 ComputeHeightFog(float3 positionWS)
     half heightFactor = saturate((_FogPlaneY - positionWS.y) * _FogHeightIntensity);
 
 #if defined(HEIGHT_FOG_EXP)
-    half fogFactor = 1.0h - exp(-fogThickness * _FogDensity);
+    half fogFactor = 1.0h - exp2(-fogThickness * _FogDensity);
 #elif defined(HEIGHT_FOG_HYP) 
-    half fogFactor = 1.0h - 1.0h / (1.0h + fogThickness * _FogDensity);
+    half fogFactor = 1.0h - rcp(1.0h + fogThickness * _FogDensity);
 #endif
 
     return half4(_FogColor.rgb, fogFactor * heightFactor * distanceFadeFactor);
