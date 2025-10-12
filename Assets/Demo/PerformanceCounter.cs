@@ -9,10 +9,12 @@ public class PerformanceCounter : MonoBehaviour
     private const int MaxFamesCount = 1;
     private readonly FrameTiming[] _frameTimings = new FrameTiming[MaxFamesCount];
 
+    private readonly int _warmUpFramesCount = 120;
     private readonly double[] _gpuFrameTimesWithoutFog = new double[2048];
     private readonly double[] _gpuFrameTimesWithFog = new double[2048];
 
     public Volume Volume;
+    public Font Font;
 
     private long _samplesCountWithFog = 0;
     private long _samplesCountWithoutFog = 0;
@@ -22,16 +24,16 @@ public class PerformanceCounter : MonoBehaviour
     private void Start()
     {
         Application.targetFrameRate = 120;
-        _systemInfo = 
-            $"Device: {SystemInfo.deviceModel}\n" +
-            $"Gfx Device: {SystemInfo.graphicsDeviceName}\n" +
-            $"Graphics API: {SystemInfo.graphicsDeviceType}\n" +
+        _systemInfo =
+            $"Device:       {SystemInfo.deviceModel}\n" +
+            $"Gfx Device:   {SystemInfo.graphicsDeviceName}\n" +
+            $"Graphics API: {SystemInfo.graphicsDeviceVersion}\n" +
             $"Resolution: {Screen.currentResolution}";
     }
 
     private void Update()
     {
-        if (Time.frameCount < 120)
+        if (Time.frameCount < _warmUpFramesCount)
         {
             // NOTE: Warmup.
             return;
@@ -56,38 +58,56 @@ public class PerformanceCounter : MonoBehaviour
 
     private void OnGUI()
     {
-        GUI.matrix = Matrix4x4.Scale(new Vector3(3, 3, 3));
-
-        if (Time.frameCount < 120)
-        {
-            // NOTE: Warmup.
-            GUILayout.Label("Warmup...");
-            return;
-        }
+        var guiScale = 3.0f;
+        GUI.matrix = Matrix4x4.Scale(new Vector3(guiScale, guiScale, guiScale));
+        GUI.skin.font = Font;
 
         var (meanTimeWithFog, errWithFog) = ComputeMeanAndErr(_gpuFrameTimesWithFog, _samplesCountWithFog);
         var (meanTimeWithoutFog, errWithoutFog) = ComputeMeanAndErr(_gpuFrameTimesWithoutFog, _samplesCountWithoutFog);
         var (meanDiff, stdErrDiff) = ComputeMeanDifference(meanTimeWithFog, errWithFog, meanTimeWithoutFog, errWithoutFog);
 
-        using (new GUILayout.VerticalScope(GUI.skin.box))
+        var rect = new Rect(Screen.safeArea);
+        rect.x /= guiScale;
+        rect.y /= guiScale;
+        rect.width /= guiScale;
+        rect.height /= guiScale;
+
+        using (new GUILayout.AreaScope(rect))
         {
-            GUILayout.Label(_systemInfo);
+            using var _ = new GUILayout.HorizontalScope();
 
-            DrawStats("GPU Time (Fog ON)  :", meanTimeWithFog, errWithFog);
-            DrawStats("GPU Time (Fog OFF) :", meanTimeWithoutFog, errWithoutFog);
-            DrawStats("GPU Time Difference:", meanDiff, stdErrDiff);
-
-            if (GUILayout.Button("Reset"))
+            using (new GUILayout.VerticalScope(GUI.skin.box))
             {
-                _samplesCountWithFog = 0;
-                _samplesCountWithoutFog = 0;
-            }
-        }
+                GUILayout.Label(_systemInfo);
+                
+                if (Time.frameCount < _warmUpFramesCount)
+                {
+                    GUILayout.Label("Warmup...");
+                }
+                else
+                {
+                    DrawStats("GPU Time (Fog ON):  ", meanTimeWithFog, errWithFog);
+                    DrawStats("GPU Time (Fog OFF): ", meanTimeWithoutFog, errWithoutFog);
+                    DrawStats("GPU Time Difference:", meanDiff, stdErrDiff);
 
-        _enableFog = GUILayout.Toggle(_enableFog, "Enable Fog");
-        if (Volume.profile.TryGet<HeightFogSettings>(typeof(HeightFogSettings), out var settings))
-        {
-            settings.active = _enableFog;
+                    if (GUILayout.Button("Reset"))
+                    {
+                        _samplesCountWithFog = 0;
+                        _samplesCountWithoutFog = 0;
+                    }
+                }
+            }
+
+            GUILayout.FlexibleSpace();
+
+            using (new GUILayout.VerticalScope(GUI.skin.box))
+            {
+                _enableFog = GUILayout.Toggle(_enableFog, "Enable Fog");
+                if (Volume.profile.TryGet<HeightFogSettings>(typeof(HeightFogSettings), out var settings))
+                {
+                    settings.active = _enableFog;
+                }
+            }
         }
     }
 
@@ -98,7 +118,7 @@ public class PerformanceCounter : MonoBehaviour
             GUILayout.Label(label);
             GUILayout.Label(mean.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
-            GUILayout.Label("err:");
+            GUILayout.Label("Err:");
             GUILayout.Label(err.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
         }
@@ -106,6 +126,9 @@ public class PerformanceCounter : MonoBehaviour
 
     private static void AddSample(double[] times, ref long samplesCount, ref FrameTiming frameTiming)
     {
+        // BUG: On Vulkan somethings it samples incorrect values! Skip it. 
+        if (frameTiming.gpuFrameTime > 10000.0) return;
+
         times[samplesCount % times.Length] = frameTiming.gpuFrameTime;
         samplesCount++;
     }
@@ -123,6 +146,7 @@ public class PerformanceCounter : MonoBehaviour
         {
             sum += times[i];
         }
+
         double mean = sum / n;
 
         double varianceSum = 0.0;

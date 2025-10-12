@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
@@ -13,6 +14,12 @@ namespace HeightFog.Runtime
         private readonly Material _material;
         private readonly MaterialPropertyBlock _props;
 
+        private bool _useIntermediateBuffer;
+        private RTHandle _intermediateBuffer;
+        private RTHandle _maxDepthBuffer;
+        private Color _fogColor;
+        private Vector4 _fogParams;
+
         public HeightFogPass(Material material)
         {
             _props = new MaterialPropertyBlock();
@@ -21,7 +28,38 @@ namespace HeightFog.Runtime
             _isMaterialPresented = _material != null;
 
             // TODO: Для данных глубины используйте возможности URP/камеры. Все решения фиксируются в результате.
-            ConfigureInput(ScriptableRenderPassInput.Depth);
+            ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
+        }
+
+        public void Setup(HeightFogSettings settings)
+        {
+            _fogColor = settings.Color.value;
+            _fogParams = new Vector4(
+                settings.Density.value,
+                settings.Distance.value,
+                settings.Height.value,
+                settings.HeightIntensity.value
+            );
+        }
+
+        public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
+        {
+            if (_useIntermediateBuffer)
+            {
+                var width = cameraTextureDescriptor.width / 2;
+                var height = cameraTextureDescriptor.height / 2;
+                var desc = new RenderTextureDescriptor(width, height
+                )
+                {
+                    graphicsFormat = GraphicsFormatUtility.GetGraphicsFormat(RenderTextureFormat.R8, false),
+                    depthBufferBits = 0,
+                    msaaSamples = 1,
+                };
+                RenderingUtils.ReAllocateHandleIfNeeded(ref _intermediateBuffer, desc, FilterMode.Bilinear);
+
+                desc.graphicsFormat = GraphicsFormatUtility.GetGraphicsFormat(RenderTextureFormat.RG32, false);
+                RenderingUtils.ReAllocateHandleIfNeeded(ref _maxDepthBuffer, desc);
+            }
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -41,16 +79,29 @@ namespace HeightFog.Runtime
             // NOTE: Only one fullscreen buffer copy of _CameraDepthTexture made by URP.
             var cmd = CommandBufferPool.Get("Height Fog");
 
-            var fogParams = new Vector4(
-                settings.Density.value,
-                settings.Distance.value,
-                settings.Height.value,
-                settings.HeightIntensity.value
-            );
-            _props.SetVector(FogParamsId, fogParams);
-            _props.SetColor(FogColorId, settings.Color.value);
+            _props.SetColor(FogColorId, _fogColor);
+            _props.SetVector(FogParamsId, _fogParams);
 
-            BlitUtils.DrawTriangle(cmd, _material, 0, _props);
+            if (!_useIntermediateBuffer)
+            {
+                BlitUtils.DrawTriangle(cmd, _material, 0, _props);
+            }
+            else
+            {
+                var renderer = renderingData.cameraData.renderer;
+                // TODO: Make 1/2 DepthBuffer.
+                Blitter.BlitCameraTexture(cmd, renderer.cameraDepthTargetHandle, _maxDepthBuffer);
+
+                cmd.SetRenderTarget(_intermediateBuffer);
+                BlitUtils.DrawTriangle(cmd, _material, 1, _props);
+                Blitter.BlitCameraTexture(
+                    cmd,
+                    _intermediateBuffer,
+                    renderer.cameraColorTargetHandle, 
+                    bilinear:true
+                );
+            }
+
 
             context.ExecuteCommandBuffer(cmd);
             cmd.Clear();
