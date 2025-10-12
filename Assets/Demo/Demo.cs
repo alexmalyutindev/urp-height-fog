@@ -3,7 +3,6 @@ using System.Globalization;
 using UnityEngine;
 using UnityEngine.Rendering;
 using HeightFog.Runtime;
-using UnityEngine.UI;
 
 public class Demo : MonoBehaviour
 {
@@ -37,7 +36,11 @@ public class Demo : MonoBehaviour
         }
 
         FrameTimingManager.CaptureFrameTimings();
-        FrameTimingManager.GetLatestTimings(MaxFamesCount, _frameTimings);
+        var samplesCount = FrameTimingManager.GetLatestTimings(MaxFamesCount, _frameTimings);
+        if (samplesCount == 0)
+        {
+            return;
+        }
 
         if (_enableFog)
         {
@@ -68,9 +71,15 @@ public class Demo : MonoBehaviour
         {
             GUILayout.Label(_systemInfo);
 
-            DrawStats("GPU FrameTime (Fog ON)  :", meanTimeWithFog, errWithFog);
-            DrawStats("GPU FrameTime (Fog OFF) :", meanTimeWithoutFog, errWithoutFog);
-            DrawStats("GPU FrameTime Difference:", meanDiff, stdErrDiff);
+            DrawStats("GPU Time (Fog ON)  :", meanTimeWithFog, errWithFog);
+            DrawStats("GPU Time (Fog OFF) :", meanTimeWithoutFog, errWithoutFog);
+            DrawStats("GPU Time Difference:", meanDiff, stdErrDiff);
+
+            if (GUILayout.Button("Reset"))
+            {
+                _samplesCountWithFog = 0;
+                _samplesCountWithoutFog = 0;
+            }
         }
 
         _enableFog = GUILayout.Toggle(_enableFog, "Enable Fog");
@@ -87,7 +96,7 @@ public class Demo : MonoBehaviour
             GUILayout.Label(label);
             GUILayout.Label(mean.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
-            GUILayout.Label("err: ");
+            GUILayout.Label("err:");
             GUILayout.Label(err.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
         }
@@ -103,15 +112,17 @@ public class Demo : MonoBehaviour
     {
         int n = Mathf.Min(times.Length, (int)samplesCount);
         if (n <= 1)
+        {
             return (0.0, 0.0);
+        }
 
-        // Compute mean
         double sum = 0.0;
         for (int i = 0; i < n; i++)
+        {
             sum += times[i];
+        }
         double mean = sum / n;
 
-        // Compute variance
         double varianceSum = 0.0;
         for (int i = 0; i < n; i++)
         {
@@ -121,8 +132,6 @@ public class Demo : MonoBehaviour
 
         double variance = varianceSum / (n - 1);
         double stdDev = Math.Sqrt(variance);
-
-        // Standard Error of the Mean
         double stdErr = stdDev / Mathf.Sqrt(n);
 
         return (mean, stdErr);
