@@ -1,7 +1,9 @@
+using System;
 using System.Globalization;
 using UnityEngine;
 using UnityEngine.Rendering;
 using HeightFog.Runtime;
+using UnityEngine.UI;
 
 public class Demo : MonoBehaviour
 {
@@ -16,10 +18,14 @@ public class Demo : MonoBehaviour
     private long _samplesCountWithFog = 0;
     private long _samplesCountWithoutFog = 0;
     private bool _enableFog = true;
+    private string _systemInfo;
 
     private void Start()
     {
         Application.targetFrameRate = 120;
+        _systemInfo = 
+            $"Device: {SystemInfo.graphicsDeviceName}\n" +
+            $"Graphics API: {SystemInfo.graphicsDeviceType}";
     }
 
     private void Update()
@@ -29,7 +35,7 @@ public class Demo : MonoBehaviour
             // NOTE: Warmup.
             return;
         }
-        
+
         FrameTimingManager.CaptureFrameTimings();
         FrameTimingManager.GetLatestTimings(MaxFamesCount, _frameTimings);
 
@@ -53,17 +59,37 @@ public class Demo : MonoBehaviour
             GUILayout.Label("Warmup...");
             return;
         }
-        
-        var avgTimeWithFog = ComputeAverageTime(_gpuFrameTimesWithFog, _samplesCountWithFog);
-        var avgTimeWithoutFog = ComputeAverageTime(_gpuFrameTimesWithoutFog, _samplesCountWithoutFog);
 
-        DrawDualLabel("GPU FrameTime (NO FOG)  : ", avgTimeWithoutFog);
-        DrawDualLabel("GPU FrameTime (WITH FOG): ", avgTimeWithFog);
+        var (meanTimeWithFog, errWithFog) = ComputeMeanAndErr(_gpuFrameTimesWithFog, _samplesCountWithFog);
+        var (meanTimeWithoutFog, errWithoutFog) = ComputeMeanAndErr(_gpuFrameTimesWithoutFog, _samplesCountWithoutFog);
+        var (meanDiff, stdErrDiff) = ComputeMeanDifference(meanTimeWithFog, errWithFog, meanTimeWithoutFog, errWithoutFog);
+
+        using (new GUILayout.VerticalScope(GUI.skin.box))
+        {
+            GUILayout.Label(_systemInfo);
+
+            DrawStats("GPU FrameTime (Fog ON)  :", meanTimeWithFog, errWithFog);
+            DrawStats("GPU FrameTime (Fog OFF) :", meanTimeWithoutFog, errWithoutFog);
+            DrawStats("GPU FrameTime Difference:", meanDiff, stdErrDiff);
+        }
 
         _enableFog = GUILayout.Toggle(_enableFog, "Enable Fog");
         if (Volume.profile.TryGet<HeightFogSettings>(typeof(HeightFogSettings), out var settings))
         {
             settings.active = _enableFog;
+        }
+    }
+
+    private static void DrawStats(string label, double mean, double err)
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            GUILayout.Label(label);
+            GUILayout.Label(mean.ToString("F3", CultureInfo.InvariantCulture));
+            GUILayout.Label("ms");
+            GUILayout.Label("err: ");
+            GUILayout.Label(err.ToString("F3", CultureInfo.InvariantCulture));
+            GUILayout.Label("ms");
         }
     }
 
@@ -73,25 +99,42 @@ public class Demo : MonoBehaviour
         samplesCount++;
     }
 
-    private static double ComputeAverageTime(double[] times, long samplesCount)
+    private static (double average, double stdErr) ComputeMeanAndErr(double[] times, long samplesCount)
     {
-        double avgTimeWithFog = 0.0;
-        for (int i = 0; i < times.Length && i < samplesCount; i++)
+        int n = Mathf.Min(times.Length, (int)samplesCount);
+        if (n <= 1)
+            return (0.0, 0.0);
+
+        // Compute mean
+        double sum = 0.0;
+        for (int i = 0; i < n; i++)
+            sum += times[i];
+        double mean = sum / n;
+
+        // Compute variance
+        double varianceSum = 0.0;
+        for (int i = 0; i < n; i++)
         {
-            avgTimeWithFog += times[i];
+            double diff = times[i] - mean;
+            varianceSum += diff * diff;
         }
-        avgTimeWithFog /= Mathf.Min(times.Length, samplesCount);
-        return avgTimeWithFog;
+
+        double variance = varianceSum / (n - 1);
+        double stdDev = Math.Sqrt(variance);
+
+        // Standard Error of the Mean
+        double stdErr = stdDev / Mathf.Sqrt(n);
+
+        return (mean, stdErr);
     }
 
-    private static void DrawDualLabel(string label, double gpuFrameTime)
+    public static (double meanDiff, double stdErrDiff) ComputeMeanDifference(
+        double mean1, double stdErr1,
+        double mean2, double stdErr2
+    )
     {
-        GUILayout.Label(label);
-        var rect = GUILayoutUtility.GetLastRect();
-        rect.x += rect.width;
-        GUI.Label(rect, gpuFrameTime.ToString("F3", CultureInfo.InvariantCulture));
-
-        rect.x += 40;
-        GUI.Label(rect, "ms");
+        double meanDiff = mean1 - mean2;
+        double stdErrDiff = Math.Sqrt(stdErr1 * stdErr1 + stdErr2 * stdErr2);
+        return (meanDiff, stdErrDiff);
     }
 }
