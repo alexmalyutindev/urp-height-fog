@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using HeightFog.Runtime;
 
-public class Demo : MonoBehaviour
+public class PerformanceCounter : MonoBehaviour
 {
     private const int MaxFamesCount = 1;
     private readonly FrameTiming[] _frameTimings = new FrameTiming[MaxFamesCount];
@@ -23,8 +23,10 @@ public class Demo : MonoBehaviour
     {
         Application.targetFrameRate = 120;
         _systemInfo = 
-            $"Device: {SystemInfo.graphicsDeviceName}\n" +
-            $"Graphics API: {SystemInfo.graphicsDeviceType}";
+            $"Device: {SystemInfo.deviceModel}\n" +
+            $"Gfx Device: {SystemInfo.graphicsDeviceName}\n" +
+            $"Graphics API: {SystemInfo.graphicsDeviceType}\n" +
+            $"Resolution: {Screen.currentResolution}";
     }
 
     private void Update()
