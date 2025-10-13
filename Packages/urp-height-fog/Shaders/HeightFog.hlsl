@@ -17,6 +17,11 @@ half4 _FogParams;
 half4 ComputeHeightFog(float3 positionWS)
 {
     float3 cameraPositionWS = GetCameraPositionWS();
+    if (cameraPositionWS.y > _FogPlaneY && positionWS.y > cameraPositionWS.y)
+    {
+        // NOTE: Early exit, if camera above fog plane and view ray not intersection it.
+        return half4(0.0h, 0.0h, 0.0h, 0.0h);
+    }
 
     half fogThickness = distance(cameraPositionWS, positionWS);
 

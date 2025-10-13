@@ -11,6 +11,7 @@ Shader "Hidden/HeightFog"
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
     #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
     #include "Packages/com.alexmalyutindev.urp-heigh-fog/Shaders/HeightFog.hlsl"
 
     struct Attributes
@@ -50,27 +51,64 @@ Shader "Hidden/HeightFog"
     {
         Pass
         {
-            Name "HeightFog x1/2"
+            Name "HeightFog OneShot"
 
             Cull Off
             ZWrite Off
             ZTest Always
-            Blend SrcAlpha OneMinusSrcAlpha
 
             HLSLPROGRAM
+            // #define HEIGHT_FOG_EXP2
+            inline half ComputeFogDensity(half thickness)
+            {
+                #if defined(HEIGHT_FOG_EXP2)
+                return 1.0h - exp2(-thickness);
+                #else
+                thickness = mad(thickness, 0.5h, 1.0h);
+                return 1.0h - rcp(thickness * thickness);
+                #endif
+            }
+
             half4 Fragment(Varyings input) : SV_Target
             {
                 half sceneDepth = LoadSceneDepth(input.positionCS.xy);
                 sceneDepth = LinearEyeDepth(sceneDepth, _ZBufferParams);
-                half3 positionWS = GetCameraPositionWS() + input.viewDirectionWS * sceneDepth;
-                return ComputeHeightFog(positionWS);
+                half3 sceneColor = LoadSceneColor(input.positionCS.xy);
+
+                half viewDirectionLengthRcp = rcp(length(input.viewDirectionWS));
+                half3 viewDirectionWS_norm = input.viewDirectionWS * viewDirectionLengthRcp;
+
+                float3 cameraPositionWS = GetCameraPositionWS();
+                half realSceneDepth = length(input.viewDirectionWS) * sceneDepth;
+
+                float fogThickness = min(realSceneDepth, _FogDistance);
+                if (input.viewDirectionWS.y < -0.001f)
+                {
+                    float planeDistance = min(0.0f, _FogPlaneY - cameraPositionWS.y) * rcp(viewDirectionWS_norm.y);
+                    fogThickness -= min(fogThickness, planeDistance);
+                }
+                else
+                {
+                    float planeDistance = (_FogPlaneY - cameraPositionWS.y) * rcp(max(0.001h, viewDirectionWS_norm.y));
+                    planeDistance = max(0.0h, planeDistance);
+                    fogThickness = min(fogThickness, min(planeDistance, _FogDistance));
+                }
+
+                half3 positionWS = cameraPositionWS + viewDirectionWS_norm * min(realSceneDepth, _FogDistance);
+
+                half fogFactor = ComputeFogDensity(fogThickness * _FogDensity);
+                half heightFactor = ComputeFogDensity(max(0.0h, _FogPlaneY - positionWS.y) * _FogHeightIntensity);
+                // heightFactor =  1.0h - exp2(min(0.0h, positionWS.y - _FogPlaneY) * _FogHeightIntensity);
+                // TODO: Add _FogHeightIntensity control
+                heightFactor = smoothstep(_FogPlaneY, 0.0h, positionWS.y);
+                return half4(lerp(sceneColor, _FogColor.rgb, fogFactor * heightFactor), 1.0h);
             }
             ENDHLSL
         }
 
         Pass
         {
-            Name "HeightFog OneShot"
+            Name "HeightFog Intermediate 1/2"
 
             Cull Off
             ZWrite Off
@@ -80,7 +118,7 @@ Shader "Hidden/HeightFog"
             HLSLPROGRAM
             half4 Fragment(Varyings input) : SV_Target
             {
-                half sceneDepth = LoadSceneDepth(input.positionCS.xy * 2.0f); 
+                half sceneDepth = LoadSceneDepth(input.positionCS.xy * 2.0f);
                 sceneDepth = LinearEyeDepth(sceneDepth, _ZBufferParams);
                 half3 positionWS = GetCameraPositionWS() + input.viewDirectionWS * sceneDepth;
                 return ComputeHeightFog(positionWS).a;

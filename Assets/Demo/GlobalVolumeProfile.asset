@@ -18,19 +18,19 @@ MonoBehaviour:
     m_Value: 1
   Color:
     m_OverrideState: 1
-    m_Value: {r: 0.846, g: 0.9555769, b: 1, a: 1}
+    m_Value: {r: 0.9292453, g: 1, b: 0.9963334, a: 1}
   Density:
     m_OverrideState: 1
-    m_Value: 0.1
+    m_Value: 0.253
   Distance:
     m_OverrideState: 1
     m_Value: 30
   Height:
     m_OverrideState: 1
-    m_Value: 4.6
+    m_Value: 8
   HeightIntensity:
     m_OverrideState: 1
-    m_Value: 0.23
+    m_Value: 1
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
