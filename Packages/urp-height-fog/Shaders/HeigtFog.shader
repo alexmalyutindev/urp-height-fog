@@ -68,14 +68,14 @@ Shader "Hidden/HeightFog"
 
                 half cameraPositionWS_Y = GetCameraPositionWS().y;
                 half realSceneDepth = viewDirectionLength * sceneDepth;
-                half positionWS_Y = cameraPositionWS_Y + viewDirectionWS_normY * min(realSceneDepth, _FogDistance);
+                half fogThickness = min(realSceneDepth, _FogDistance);
+                half positionWS_Y = cameraPositionWS_Y + viewDirectionWS_normY * fogThickness;
 
-                if (_FogPlaneY < cameraPositionWS_Y && viewDirectionWS_normY > 0)
+                if (cameraPositionWS_Y > _FogPlaneY && positionWS_Y > _FogPlaneY)
                 {
                     return half4(sceneColor, 1.0h);
                 }
 
-                half fogThickness = min(realSceneDepth, _FogDistance);
                 half fogFactor = ComputeFogDensity(fogThickness * _FogDensity);
                 half heightFactor = smoothstep(0.0h, 1.0h, (_FogPlaneY - positionWS_Y) * _FogHeightIntensity);
                 return half4(lerp(sceneColor, _FogColor.rgb, fogFactor * heightFactor), 1.0h);
