@@ -24,7 +24,7 @@ MonoBehaviour:
     m_Value: 0.253
   Distance:
     m_OverrideState: 1
-    m_Value: 50
+    m_Value: 60
   Height:
     m_OverrideState: 1
     m_Value: 8
