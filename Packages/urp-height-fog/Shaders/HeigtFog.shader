@@ -76,28 +76,16 @@ Shader "Hidden/HeightFog"
                 half3 sceneColor = LoadSceneColor(input.positionCS.xy);
 
                 half viewDirectionLengthRcp = rcp(length(input.viewDirectionWS));
-                half3 viewDirectionWS_norm = input.viewDirectionWS * viewDirectionLengthRcp;
+                half viewDirectionWS_normY = input.viewDirectionWS.y * viewDirectionLengthRcp;
 
-                float3 cameraPositionWS = GetCameraPositionWS();
+                half cameraPositionWS_Y = GetCameraPositionWS().y;
                 half realSceneDepth = length(input.viewDirectionWS) * sceneDepth;
 
-                float fogThickness = min(realSceneDepth, _FogDistance);
-                if (input.viewDirectionWS.y < -0.001f)
-                {
-                    float planeDistance = min(0.0f, _FogPlaneY - cameraPositionWS.y) * rcp(viewDirectionWS_norm.y);
-                    fogThickness -= min(fogThickness, planeDistance);
-                }
-                else
-                {
-                    float planeDistance = (_FogPlaneY - cameraPositionWS.y) * rcp(max(0.001h, viewDirectionWS_norm.y));
-                    planeDistance = max(0.0h, planeDistance);
-                    fogThickness = min(fogThickness, min(planeDistance, _FogDistance));
-                }
-
-                half3 positionWS = cameraPositionWS + viewDirectionWS_norm * min(realSceneDepth, _FogDistance);
+                half fogThickness = min(realSceneDepth, _FogDistance);
+                half positionWS_Y = cameraPositionWS_Y + viewDirectionWS_normY * min(realSceneDepth, _FogDistance);
 
                 half fogFactor = ComputeFogDensity(fogThickness * _FogDensity);
-                half heightFactor = smoothstep(0.0h, 1.0h, (_FogPlaneY - positionWS.y) * _FogHeightIntensity);
+                half heightFactor = smoothstep(0.0h, 1.0h, (_FogPlaneY - positionWS_Y) * _FogHeightIntensity);
                 return half4(lerp(sceneColor, _FogColor.rgb, fogFactor * heightFactor), 1.0h);
             }
             ENDHLSL
