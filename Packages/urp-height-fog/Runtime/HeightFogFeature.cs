@@ -24,7 +24,7 @@ namespace HeightFog.Runtime
             if (renderingData.cameraData.cameraType is CameraType.Game or CameraType.SceneView)
             {
                 var settings = VolumeManager.instance.stack.GetComponent<HeightFogSettings>();
-                // if (settings.Enable.value)
+                if (settings.Enable.value)
                 {
                     _pass.Setup(settings);
                     renderer.EnqueuePass(_pass);

@@ -10,10 +10,6 @@ half4 _FogParams;
 #define _FogPlaneY (_FogParams.z)
 #define _FogHeightIntensity (_FogParams.w)
 
-// #define HEIGHT_FOG_EXP
-#define HEIGHT_FOG_HYP
-#define HEIGHT_FOG_DISTFADE_RAY_CORRECTION
-
 inline half ComputeFogDensity(half thickness)
 {
     #if defined(HEIGHT_FOG_EXP2)
