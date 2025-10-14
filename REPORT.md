@@ -17,6 +17,11 @@ Another way is storing separate `_FogBackDepth` buffer of fog far surface and de
 but it will also present separate `_FogDensity` buffer and increase feature cost.<br>
 I decided to keep it simple, just to render it in one pass, without presenting additional buffers, but sacrifice Transparent geometry.
 
+The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)`
+for computing transmittance. This math is mostly optimized, and split in to factors:
+thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
+This to factors multiplied into final fog density.
+
 For rendering/blending fog into the scene, I've tested several solutions:
 - Manual AlphaBlend in fog shader - gives good result, but requires `CopyColor`, if it's already presented, the cast already paid and we good to go. 
 - `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, but performs worse on my test device.
@@ -27,10 +32,7 @@ There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_Fog
 then using more data for upscaling will reduce visual artefacts.<br>
 But earlier iterations on this approach gives worse performance.
 
-The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)` 
-for computing transmittance. This math is mostly optimized, and split in to factors: 
-thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
-
+---
 
 ### Test Device
 **Nothing SMF Phone 2 Pro** [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
@@ -44,8 +46,19 @@ Benchmarks:
 - GeekBench 6: Multi-core: 2963 | Single-core: 1013
 ```
 
-### Screenshot:
+### Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
+
+### Timings:
+|                 | Fog Off   | Fog On    | Fog time |
+|-----------------|-----------|-----------|----------|
+| GPU frame time: | ~10.087ms | ~12.449ms | ~2.363ms |
+| CPU frame time: |           |           |          |
+
 ![screen](./Pictures/Screenshot_20251014-143244.png)
+
+
 
 ### MaliOC report for `HeightFog.shader` fragment:
 ```yaml

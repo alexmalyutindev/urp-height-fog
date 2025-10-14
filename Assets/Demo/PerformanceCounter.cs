@@ -10,14 +10,17 @@ public class PerformanceCounter : MonoBehaviour
     private readonly FrameTiming[] _frameTimings = new FrameTiming[MaxFamesCount];
 
     private readonly int _warmUpFramesCount = 120;
-    private readonly double[] _gpuFrameTimesWithoutFog = new double[2048];
-    private readonly double[] _gpuFrameTimesWithFog = new double[2048];
+    private readonly double[] _gpuFrameTimesFogOff = new double[2048];
+    private readonly double[] _gpuFrameTimesFogOn = new double[2048]; 
+    
+    private readonly double[] _cpuFrameTimesFogOff = new double[2048];
+    private readonly double[] _cpuFrameTimesFogOn = new double[2048];
 
     public Volume Volume;
     public Font Font;
 
-    private long _samplesCountWithFog = 0;
-    private long _samplesCountWithoutFog = 0;
+    private long _samplesCountFogOn = 0;
+    private long _samplesCountFogOff = 0;
     private bool _enableFog = true;
     private string _systemInfo;
 
@@ -28,7 +31,7 @@ public class PerformanceCounter : MonoBehaviour
             $"Device:       {SystemInfo.deviceModel}\n" +
             $"Gfx Device:   {SystemInfo.graphicsDeviceName}\n" +
             $"Graphics API: {SystemInfo.graphicsDeviceVersion}\n" +
-            $"Resolution: {Screen.currentResolution}";
+            $"Resolution:   {Screen.currentResolution}";
     }
 
     private void Update()
@@ -48,23 +51,33 @@ public class PerformanceCounter : MonoBehaviour
 
         if (_enableFog)
         {
-            AddSample(_gpuFrameTimesWithFog, ref _samplesCountWithFog, ref _frameTimings[0]);
+            AddSample(_gpuFrameTimesFogOn, _cpuFrameTimesFogOn, ref _samplesCountFogOn, ref _frameTimings[0]);
         }
         else
         {
-            AddSample(_gpuFrameTimesWithoutFog, ref _samplesCountWithoutFog, ref _frameTimings[0]);
+            AddSample(_gpuFrameTimesFogOff, _cpuFrameTimesFogOff, ref _samplesCountFogOff, ref _frameTimings[0]);
         }
     }
 
     private void OnGUI()
     {
-        var guiScale = 3.0f;
+        var guiScale = 2.0f;
         GUI.matrix = Matrix4x4.Scale(new Vector3(guiScale, guiScale, guiScale));
         GUI.skin.font = Font;
 
-        var (meanTimeWithFog, errWithFog) = ComputeMeanAndErr(_gpuFrameTimesWithFog, _samplesCountWithFog);
-        var (meanTimeWithoutFog, errWithoutFog) = ComputeMeanAndErr(_gpuFrameTimesWithoutFog, _samplesCountWithoutFog);
-        var (meanDiff, stdErrDiff) = ComputeMeanDifference(meanTimeWithFog, errWithFog, meanTimeWithoutFog, errWithoutFog);
+        var (gpuMeanFogOn, errFogOn) = ComputeMeanAndErr(_gpuFrameTimesFogOn, _samplesCountFogOn);
+        var (gpuMeanFogOff, errFogOff) = ComputeMeanAndErr(_gpuFrameTimesFogOff, _samplesCountFogOff);
+        var (gpuMeanDiff, gpuErrDiff) = ComputeMeanDifference(
+            gpuMeanFogOn, errFogOn, 
+            gpuMeanFogOff, errFogOff
+        );
+
+        var (cpuMeanFogOn, cpuErrFogOn) = ComputeMeanAndErr(_cpuFrameTimesFogOn, _samplesCountFogOn);
+        var (cpuMeanFogOff, cpuErrFogOff) = ComputeMeanAndErr(_cpuFrameTimesFogOff, _samplesCountFogOff);
+        var (cpuMeanDiff, cpuErrDiff) = ComputeMeanDifference(
+            cpuMeanFogOn, cpuErrFogOn, 
+            cpuMeanFogOff, cpuErrFogOff
+        );
 
         var rect = new Rect(Screen.safeArea);
         rect.x /= guiScale;
@@ -86,14 +99,21 @@ public class PerformanceCounter : MonoBehaviour
                 }
                 else
                 {
-                    DrawStats("GPU Time (Fog ON):  ", meanTimeWithFog, errWithFog);
-                    DrawStats("GPU Time (Fog OFF): ", meanTimeWithoutFog, errWithoutFog);
-                    DrawStats("GPU Time Difference:", meanDiff, stdErrDiff);
+                    GUILayout.Label("GPU FrameTime:");
+                    DrawStats("  Fog ON:    ", gpuMeanFogOn, errFogOn);
+                    DrawStats("  Fog OFF:   ", gpuMeanFogOff, errFogOff);
+                    DrawStats("  Difference:", gpuMeanDiff, gpuErrDiff);
 
+                    GUILayout.Label("CPU RenderThread:");
+                    DrawStats("  Fog ON:    ", cpuMeanFogOn, cpuErrFogOn);
+                    DrawStats("  Fog OFF:   ", cpuMeanFogOff, cpuErrFogOff);
+                    DrawStats("  Difference:", cpuMeanDiff, cpuErrDiff);
+
+                    GUILayout.Space(2);
                     if (GUILayout.Button("Reset"))
                     {
-                        _samplesCountWithFog = 0;
-                        _samplesCountWithoutFog = 0;
+                        _samplesCountFogOn = 0;
+                        _samplesCountFogOff = 0;
                     }
                 }
             }
@@ -113,23 +133,25 @@ public class PerformanceCounter : MonoBehaviour
 
     private static void DrawStats(string label, double mean, double err)
     {
-        using (new GUILayout.HorizontalScope())
+        using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(false)))
         {
             GUILayout.Label(label);
             GUILayout.Label(mean.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
-            GUILayout.Label("Err:");
+            GUILayout.Label(" | err:");
             GUILayout.Label(err.ToString("F3", CultureInfo.InvariantCulture));
             GUILayout.Label("ms");
         }
+        GUILayout.Space(-2);
     }
 
-    private static void AddSample(double[] times, ref long samplesCount, ref FrameTiming frameTiming)
+    private static void AddSample(double[] gpuTimes, double[] cpuTimes, ref long samplesCount, ref FrameTiming frameTiming)
     {
         // BUG: On Vulkan somethings it samples incorrect values! Skip it. 
         if (frameTiming.gpuFrameTime > 10000.0) return;
 
-        times[samplesCount % times.Length] = frameTiming.gpuFrameTime;
+        gpuTimes[samplesCount % gpuTimes.Length] = frameTiming.gpuFrameTime;
+        cpuTimes[samplesCount % gpuTimes.Length] = frameTiming.cpuRenderThreadFrameTime;
         samplesCount++;
     }
 
