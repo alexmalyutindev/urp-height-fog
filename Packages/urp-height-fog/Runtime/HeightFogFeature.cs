@@ -13,7 +13,6 @@ namespace HeightFog.Runtime
         {
             BlitUtils.Initialize();
 
-            // TODO: Выбор точки вставки в пайплайн самостоятельный. При отправке результата нужно зафиксировать выбранное место и причину выбора.
             _pass = new HeightFogPass(HeightFogMaterial)
             {
                 renderPassEvent = RenderPassEvent.BeforeRenderingTransparents,

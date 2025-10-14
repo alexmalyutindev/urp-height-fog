@@ -1,6 +1,10 @@
-I have chosen Unity 6.0.59f1 instead of 6.0.56f1 because of security vulnerability. 
 
+![screen](./Pictures/Screenshot_20251014-143244.png)
 
+Main points:
+- I have chosen Unity 6.0.59f1 instead of 6.0.56f1 because of security vulnerability.
+- The `HeightFogFeature` pass was injected before `RenderPassEvent.BeforeRenderingTransparents`, to be able to use DepthCopy and ColorCopy made after Opaque and AlphaTest geometry.
+- Feature is using _
 
 ### MaliOC report:
 ```yaml
