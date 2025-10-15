@@ -86,9 +86,9 @@ namespace HeightFog.Runtime
 
         private static bool IsGPUPreferManualBlend()
         {
-            string gpuName = SystemInfo.graphicsDeviceName;
+            string gpuName = SystemInfo.graphicsDeviceName.ToLower();
             // TODO: Collect a table of GPUs, that prefer manual blend instead of AlphaBlend!
-            bool preferManualBlend = gpuName.Contains("Mali");
+            bool preferManualBlend = gpuName.Contains("mali");
             return preferManualBlend;
         }
     }

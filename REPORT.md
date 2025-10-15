@@ -1,3 +1,10 @@
+# Screen-Space Height + Distance Fog - Technical Report
+## Executive Summary
+Implemented a mobile-optimized URP RenderFeature for combined height and distance fog with minimal performance overhead (~2.3ms GPU on mid-range devices). The solution uses a single full-screen pass with adaptive blending strategies based on GPU architecture.
+
+**Unity Version:** 6.0.59f1 (upgraded from 6.0.56f1 due to security vulnerabilities)<br>
+**URP Version:** 17.0.4<br>
+**Target Devices:** Nothing CMF Phone 2 Pro, Samsung Galaxy S21 FE 5G<br>
 
 
 ### Main points:
@@ -5,6 +12,194 @@
 - The `HeightFogFeature` pass is injected at `RenderPassEvent.BeforeRenderingTransparents`.
 - Feature is using URP's DepthCopy `_CameraDepthTexture` for fog calculation, and ColorCopy `_CameraOpaqueTexture` for blending.
 - Instead of using direct AlphaBlend mode in shader, I'm using manual blending with `_CameraOpaqueTexture`, that gives slightly better results on Mali chip.
+
+---
+
+### Component Structure
+
+1. **HeightFogFeature** (RenderFeature)
+2. **HeightFogPass** (ScriptableRenderPass)
+    - Executes single full-screen fog calculation
+    - Uses existing URP depth and color buffers
+3. **HeightFog.shader** (HLSL)
+    - Exponential fog density calculation
+    - Optimized intersection math with fog volume
+    - Two blending modes: Manual and Hardware AlphaBlend
+4. **HeightFogSettings** (VolumeComponent)
+   - **Color** (Color) - Base fog tint
+   - **Density** (float) - Overall fog density multiplier
+   - **Distance** (float) - Max fog view distance from camera
+   - **Height** (float) - Upper plane fog boundary
+   - **Height Intensity** (float) - Vertical gradient strength
+
+## Pipeline Integration
+
+### Injection Point: `RenderPassEvent.BeforeRenderingTransparents`
+**Rationale:**
+1. **Depth Buffer Access:** At this point, all opaque and AlphaTest geometry has been rendered, providing complete `_CameraDepthTexture`
+2. **Color Buffer Availability:** URP's `_CameraOpaqueTexture` is available after Skybox pass, allowing manual blending
+3. **UI Preservation:** HUD/UI elements rendered in overlay mode remain unaffected as they render after this event. WorldSpace UI should be rendered after Fog or before, with stencil write.
+4. **Performance Trade-off:** Single pass before transparents is cheaper than per-object fog in shaders
+
+**Visual Impact:**
+- ✅ Fog correctly applies to all opaque geometry and skybox
+- ✅ UI/HUD elements remain fog-free
+- ⚠️ Transparent objects do NOT receive fog (documented limitation)
+
+### Alternative Approaches Considered
+
+| Approach                                    | Pros                           | Cons                                     | Decision       |
+|---------------------------------------------|--------------------------------|------------------------------------------|----------------|
+| Current: Single pass before transparents    | Minimal cost, clean opaque fog | No transparency support                  | ✅ **Selected** |
+| Per-object fog                              | Transparency support           | More costly and has blending artefacts   | ❌ Rejected     |
+| Dual-depth buffer (_FogDensity_MinMaxDepth) | Transparency support           | More costly and require ~+10MB of memory | ❌ Rejected     |
+
+---
+
+## Buffer Management and Resource Lifecycle
+### Temporary Buffers: **NONE**
+The implementation uses **zero custom intermediate buffers**. All required data comes from URP's pipeline:
+- Depth: `_CameraDepthTexture` (created by URP DepthCopy pass)
+- Color: `_CameraOpaqueTexture` (created by URP ColorCopy pass)
+
+---
+
+## Full-Screen Copies and RT Switches
+
+### Count: **0 additional copies, 0 additional RT switches**
+**Breakdown:**
+- **Existing URP copies** (not added by fog):
+    - DepthCopy → `_CameraDepthTexture` (required by URP for depth testing)
+    - ColorCopy → `_CameraOpaqueTexture` (required for manual blending)
+- **FogPass operations:**
+    - 1 full-screen draw directly to camera target (no copy)
+    - 0 RT switches (renders to already active target)
+
+**Optimization Notes:**
+- Manual blending mode requires `_CameraOpaqueTexture`, but if this buffer is in use in RenderPipeline, additional cost is already paid
+- On devices where hardware AlphaBlend is efficient (Adreno GPUs), we use it to skip color buffer access entirely
+- Tested low-resolution rendering with upscaling (+2 buffers, +1 copy) but measured performance was **worse** due to upscale quality issues and additional memory bandwidth
+
+
+## Blending Strategy: Platform-Adaptive
+### Problem
+Different mobile GPU architectures show different performance characteristics for blending operations:
+
+| GPU Family      | Hardware AlphaBlend  | Manual Blend             |  Winner  |
+|-----------------|----------------------|--------------------------|----------|
+| Mali (G615 MC2) | Slower               | **Faster** (~0.3ms gain) | Manual   |
+| Adreno (660)    | **Faster**           | Slower (~0.2ms loss)     | Hardware |
+
+---
+
+## Fog Calculation Details
+
+### Mathematical Model
+
+TODO: 
+
+### Optimization Notes
+- Factored calculation allows early-out when `heightFactor = 0` (above fog)
+- Single texture sample for depth (position reconstructed from depth + screen UV)
+- Uses `1/(1+x)` or `exp2()` for fast density calculation on mobile GPUs
+- Optimized matrix multiplication in vertex pass for `viewDirectionVS`
+- TODO:
+
+---
+
+### Test Results:
+
+#### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
+```yaml
+OS: Android 15
+Resolution: 1080 x 2392
+SoC: Mediatek Dimensity 7300 Pro (4 nm)
+CPU: Octa-core (4x2.5 GHz Cortex-A78 & 4x2.0 GHz Cortex-A55)
+GPU: Mali-G615 MC2
+Benchmarks:
+- AnTuTu 10: 683318
+- GeekBench 6: Multi-core: 2963 | Single-core: 1013
+```
+
+|                                | Fog Off   | Fog On    | Fog Time |
+|--------------------------------|-----------|-----------|----------|
+| GPU frame time                 | ~10.087ms | ~12.449ms | ~2.363ms |
+| CPU frame time                 |           |           | TODO     |
+| HeightFogPass (ProfilerMarker) | -         | -         | TODO     |
+
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
+
+<details>
+<summary>TODO: Screenshots</summary>
+</details>
+
+**Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
+```yaml
+OS: Android 15
+Resolution: 1080 x 2340 
+SoC: Qualcomm SM8350 Snapdragon 888 5G (5 nm) 
+CPU: Octa-core (1x2.84 GHz Cortex-X1 & 3x2.42 GHz Cortex-A78 & 4x1.80 GHz Cortex-A55)
+GPU: Adreno (TM) 660
+Benchmarks:
+- AnTuTu: 566529 (v8), 719696 (v9)
+- GeekBench: 3049 (v5.1)
+```
+
+|                                | Fog Off  | Fog On   | Fog Time |
+|--------------------------------|----------|----------|----------|
+| GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
+| CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
+| HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
+
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.64MB (10108800B)
+
+<details>
+<summary>Screenshots</summary>
+<img src="./Pictures/sgs21fe/fog-on.jpg" width=50%/><img src="./Pictures/sgs21fe/fog-on-alphablend.jpg" width=50%/>
+</details>
+
+**Honor 400** [[GSM Arena](https://www.gsmarena.com/honor_400_5g-13799.php)]
+```yaml
+OS: Android 15
+Resolution: 1264 x 2736 pixels
+SoC: Qualcomm SM7550-AB Snapdragon 7 Gen 3 (4 nm)
+CPU: Octa-core (1x2.63 GHz Cortex-A715 & 3x2.4 GHz Cortex-A715 & 4x1.8 GHz Cortex-A510)
+GPU: Adreno 720
+Benchmarks:
+- AnTuTu: 864286 (v10)
+- GeekBench: 3198 (v6)
+```
+
+|                                | Fog Off  | Fog On   | Fog Time |
+|--------------------------------|----------|----------|----------|
+| GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
+| CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
+| HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
+
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~13.19MB (13833216B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~13.19MB (13833216B)
+
+<details>
+<summary>Screenshots</summary>
+<img src="./Pictures/honor400/fog-on.jpg" width=50%/><img src="./Pictures/honor400/fog-off.jpg" width=50%/>
+<img src="./Pictures/honor400/fog-on-alphablend.jpg" width=50%/><img src="./Pictures/honor400/fog-off-alphablend.jpg" width=50%/>
+</details>
+
+
+
+
+
+
+
+
+---
+# OLD
+---
 
 ## Details:
 ### Queue and Transparency
@@ -40,49 +235,7 @@ So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it 
 
 ---
 
-### Test Devices:
-#### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
-```yaml
-OS: Android 15
-Chipset: Mediatek Dimensity 7300 Pro (4 nm)
-CPU:     Octa-core (4x2.5 GHz Cortex-A78 & 4x2.0 GHz Cortex-A55)
-GPU:     Mali-G615 MC2
-Benchmarks:
-- AnTuTu 10: 683318
-- GeekBench 6: Multi-core: 2963 | Single-core: 1013
-```
-
-Times:
-![screen](./Pictures/Screenshot_20251014-143244.png)
-
-|                 | Fog Off   | Fog On    | Fog time |
-|-----------------|-----------|-----------|----------|
-| GPU frame time: | ~10.087ms | ~12.449ms | ~2.363ms |
-| CPU frame time: |           |           |          |
-
-Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
-
-**Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
-```yaml
-Chipset: Qualcomm SM8350 Snapdragon 888 5G (5 nm) 
-CPU:     Octa-core (1x2.84 GHz Cortex-X1 & 3x2.42 GHz Cortex-A78 & 4x1.80 GHz Cortex-A55)
-GPU:     Adreno (TM) 660
-Benchmarks:
-- AnTuTu: 566529 (v8), 719696 (v9)
-- GeekBench: 3049 (v5.1)
-```
-
-|                 | Fog Off   | Fog On    | Fog time |
-|-----------------|-----------|-----------|----------|
-| GPU frame time: | ~10.087ms | ~12.449ms | ~2.363ms |
-| CPU frame time: |           |           |          |
-
-Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
-
+---
 
 ## MaliOC report for `HeightFog.shader` fragment:
 ```yaml
