@@ -211,17 +211,18 @@ namespace Demo
             });
             rightBox.Add(_fogToggle);
 
-            _useAlphaBlendToggle = new Toggle("Use AlphaBlend") { value = _useAlphaBlend };
-            _useAlphaBlendToggle.RegisterValueChangedCallback(evt =>
-            {
-                _useAlphaBlend = evt.newValue;
-                _warmUpFramesCount = 10;
-                if (Volume.profile.TryGet(out HeightFogSettings settings))
-                {
-                    settings.UseAlphaBlend.value = _useAlphaBlend;
-                }
-            });
-            rightBox.Add(_useAlphaBlendToggle);
+            // NOTE: UseAlphaBlend is nested by GPU type.
+            // _useAlphaBlendToggle = new Toggle("Use AlphaBlend") { value = _useAlphaBlend };
+            // _useAlphaBlendToggle.RegisterValueChangedCallback(evt =>
+            // {
+            //     _useAlphaBlend = evt.newValue;
+            //     _warmUpFramesCount = 10;
+            //     if (Volume.profile.TryGet(out HeightFogSettings settings))
+            //     {
+            //         settings.UseAlphaBlend.value = _useAlphaBlend;
+            //     }
+            // });
+            // rightBox.Add(_useAlphaBlendToggle);
         }
 
         private void AddSample(double[] gpuTimes, double[] cpuTimes, ref long samplesCount, ref FrameTiming frameTiming)

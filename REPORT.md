@@ -6,10 +6,12 @@
 - Feature is using URP's DepthCopy `_CameraDepthTexture` for fog calculation, and ColorCopy `_CameraOpaqueTexture` for blending.
 - Instead of using direct AlphaBlend mode in shader, I'm using manual blending with `_CameraOpaqueTexture`, that gives slightly better results on Mali chip.
 
-### Details:
+## Details:
+### Queue and Transparency
 The fog rendered in one DrawCall at `RenderPassEvent.BeforeRenderingTransparents` as a full screen effect, 
 right after `Skybox` and before `Transparents` pass.
-The pass uses Queue to be able to use DepthCopy and ColorCopy buffers, that made after Opaque and AlphaTest geometry. With such queue, the feature doesn't properly interact with Transparent geometry.
+The pass uses Queue to be able to use DepthCopy and ColorCopy buffers, that made after Opaque and AlphaTest geometry. 
+With such queue, the feature doesn't properly interact with Transparent geometry.
 
 Alternative solution to support Transparent geometry, it is moving fog calculation into Transparent shader,
 but it will be more costly and AlphaBlend still will present more visual issues.<br>
@@ -17,14 +19,16 @@ Another way is storing separate `_FogBackDepth` buffer of fog far surface and de
 but it will also present separate `_FogDensity` buffer and increase feature cost.<br>
 I decided to keep it simple, just to render it in one pass, without presenting additional buffers, but sacrifice Transparent geometry.
 
+### Fog evaluation
 The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)`
 for computing transmittance. This math is mostly optimized, and split in to factors:
 thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
 This to factors multiplied into final fog density.
 
+### Applying of the fog
 For rendering/blending fog into the scene, I've tested several solutions:
 - Manual AlphaBlend in fog shader - gives good result, but requires `CopyColor`, if it's already presented, the cast already paid and we good to go. 
-- `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, but performs worse on my test device.
+- `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, it performs worse on `Mali-G615 MC2` but better on `Adreno (TM) 660`.
 - Render in smaller target, and upscale after - this makes main shader chipper, but adds memory overhead of two new low-res buffer: 
 `_MaxSceneDepth` and `_FogDensity_MaxDepth`. And also adds cost of depth-guided upscaling (5 texture samples), 
 which often presents visual bugs around thing objects or holes.<br>
@@ -32,9 +36,11 @@ There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_Fog
 then using more data for upscaling will reduce visual artefacts.<br>
 But earlier iterations on this approach gives worse performance.
 
+So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it depending on the running device. 
+
 ---
 
-### Test Device
+### Test Devices:
 **Nothing SMF Phone 2 Pro** [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
 ```yaml
 OS: Android 15
@@ -44,6 +50,16 @@ GPU:     Mali-G615 MC2
 Benchmarks:
 - AnTuTu 10: 683318
 - GeekBench 6: Multi-core: 2963 | Single-core: 1013
+```
+
+**Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
+```yaml
+Chipset: Qualcomm SM8350 Snapdragon 888 5G (5 nm) 
+CPU:     Octa-core (1x2.84 GHz Cortex-X1 & 3x2.42 GHz Cortex-A78 & 4x1.80 GHz Cortex-A55)
+GPU:     Adreno (TM) 660
+Benchmarks:
+- AnTuTu: 566529 (v8), 719696 (v9)
+- GeekBench: 3049 (v5.1)
 ```
 
 ### Memory:

@@ -8,6 +8,9 @@ namespace HeightFog.Runtime
 {
     public class HeightFogPass : ScriptableRenderPass
     {
+        private const int FogManualBlendPasId = 0;
+        private const int FogAlphaBlendPassId = 1;
+
         private static readonly int FogColorId = Shader.PropertyToID("_FogColor");
         private static readonly int FogParamsId = Shader.PropertyToID("_FogParams");
 
@@ -17,7 +20,7 @@ namespace HeightFog.Runtime
 
         private Color _fogColor;
         private Vector4 _fogParams;
-        private bool _useAlphaBlend;
+        private readonly bool _useManualBlend;
 
         public HeightFogPass(Material material)
         {
@@ -27,11 +30,21 @@ namespace HeightFog.Runtime
             _isMaterialPresented = _material != null;
             profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPas);
 
-            // NOTE: Only two fullscreen buffer copy of _CameraDepthTexture and _CameraOpaqueTexture made by URP.
-            ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
+            
+            _useManualBlend = IsGPUPreferManualBlend();
+
+            var requiredInput = ScriptableRenderPassInput.Depth;
+            if (_useManualBlend)
+            {
+                requiredInput |= ScriptableRenderPassInput.Color;
+            }
+
+            // NOTE: Two or One fullscreen buffer copy of _CameraDepthTexture and _CameraOpaqueTexture made by URP,
+            // depending on _useManualBlend or not!
+            ConfigureInput(requiredInput);
         }
 
-        public void Setup(HeightFogSettings settings, bool useAlphaBlend)
+        public void Setup(HeightFogSettings settings)
         {
             _fogColor = settings.Color.value;
             _fogParams = new Vector4(
@@ -40,7 +53,6 @@ namespace HeightFog.Runtime
                 settings.Height.value,
                 settings.HeightIntensity.value
             );
-            _useAlphaBlend = useAlphaBlend;
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -62,7 +74,7 @@ namespace HeightFog.Runtime
                 _props.SetColor(FogColorId, _fogColor);
                 _props.SetVector(FogParamsId, _fogParams);
 
-                var pass = _useAlphaBlend ? 1 : 0;
+                var pass = _useManualBlend ? FogManualBlendPasId : FogAlphaBlendPassId;
                 BlitUtils.DrawTriangle(cmd, _material, pass, _props);
             }
 
@@ -70,6 +82,14 @@ namespace HeightFog.Runtime
             cmd.Clear();
 
             CommandBufferPool.Release(cmd);
+        }
+
+        private static bool IsGPUPreferManualBlend()
+        {
+            string gpuName = SystemInfo.graphicsDeviceName;
+            // TODO: Collect a table of GPUs, that prefer manual blend instead of AlphaBlend!
+            bool preferManualBlend = gpuName.Contains("Mali");
+            return preferManualBlend;
         }
     }
 }
