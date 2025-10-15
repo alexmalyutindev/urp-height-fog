@@ -26,7 +26,7 @@ namespace HeightFog.Runtime
                 var settings = VolumeManager.instance.stack.GetComponent<HeightFogSettings>();
                 if (settings.Enable.value)
                 {
-                    _pass.Setup(settings);
+                    _pass.Setup(settings, settings.UseAlphaBlend.value);
                     renderer.EnqueuePass(_pass);
                 }
             }

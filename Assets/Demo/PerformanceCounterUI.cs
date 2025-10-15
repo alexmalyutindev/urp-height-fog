@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UIElements;
+using UnityEngine.Profiling;
 using HeightFog.Runtime;
 
 namespace Demo
@@ -10,20 +11,27 @@ namespace Demo
     public class PerformanceCounterUI : MonoBehaviour
     {
         private const int MaxFramesCount = 1;
+        private const int MaxSamplesCount = 1024;
+
         private readonly FrameTiming[] _frameTimings = new FrameTiming[MaxFramesCount];
 
-        private readonly int _warmUpFramesCount = 120;
-        private readonly double[] _gpuFrameTimesFogOff = new double[2048];
-        private readonly double[] _gpuFrameTimesFogOn = new double[2048];
-        private readonly double[] _cpuFrameTimesFogOff = new double[2048];
-        private readonly double[] _cpuFrameTimesFogOn = new double[2048];
+        private int _warmUpFramesCount = 120;
 
-        public Font Font;
-        public Volume Volume;
+        private long _samplesCountFogOff = 0;
+        private readonly double[] _gpuFrameTimesFogOff = new double[MaxSamplesCount];
+        private readonly double[] _cpuFrameTimesFogOff = new double[MaxSamplesCount];
 
         private long _samplesCountFogOn = 0;
-        private long _samplesCountFogOff = 0;
-        private bool _enableFog = true;
+        private readonly double[] _gpuFrameTimesFogOn = new double[MaxSamplesCount];
+        private readonly double[] _cpuFrameTimesFogOn = new double[MaxSamplesCount];
+
+        private long _gpuFogPassSamplesCount = 0;
+        private readonly double[] _gpuFogPassTimes = new double[60];
+
+        public Volume Volume;
+
+        private string _systemInfo;
+        private VisualElement _root;
 
         // UI Elements
         private Label _systemInfoLabel;
@@ -31,12 +39,17 @@ namespace Demo
         private Label _gpuFogOnLabel, _gpuFogOffLabel, _gpuDiffLabel;
         private Label _cpuFogOnLabel, _cpuFogOffLabel, _cpuDiffLabel;
         private Button _resetButton;
+
         private Toggle _fogToggle;
+        private bool _enableFog = true;
 
-        private VisualElement _root;
-        private string _systemInfo;
+        private Toggle _useAlphaBlendToggle;
+        private bool _useAlphaBlend = false;
 
-        private void Awake()
+        private ProfilingSampler _profilingSampler;
+        private Label _gpuFogPassTime;
+
+        private void Start()
         {
             Application.targetFrameRate = 120;
             _systemInfo =
@@ -46,19 +59,23 @@ namespace Demo
                 $"Resolution:   {Screen.currentResolution}";
 
             BuildUI();
+            _profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPas);
+            _profilingSampler.enableRecording = true;
         }
 
         private void Update()
         {
-            if (Time.frameCount < _warmUpFramesCount)
+            FrameTimingManager.CaptureFrameTimings();
+
+            if (_warmUpFramesCount > 0)
             {
-                _warmupLabel.text = $"Warming up... ({Time.frameCount}/{_warmUpFramesCount})";
+                _warmupLabel.text = $"Warming up... ({_warmUpFramesCount})";
+                _warmUpFramesCount--;
                 return;
             }
 
             _warmupLabel.text = "";
 
-            FrameTimingManager.CaptureFrameTimings();
             var samplesCount = FrameTimingManager.GetLatestTimings(MaxFramesCount, _frameTimings);
             if (samplesCount == 0)
                 return;
@@ -66,6 +83,9 @@ namespace Demo
             if (_enableFog)
             {
                 AddSample(_gpuFrameTimesFogOn, _cpuFrameTimesFogOn, ref _samplesCountFogOn, ref _frameTimings[0]);
+
+                _gpuFogPassTimes[_gpuFogPassSamplesCount % _gpuFogPassTimes.Length] = _profilingSampler.gpuElapsedTime;
+                _gpuFogPassSamplesCount++;
             }
             else
             {
@@ -83,21 +103,27 @@ namespace Demo
 
             var (cpuMeanFogOn, cpuErrFogOn) = ComputeMeanAndErr(_cpuFrameTimesFogOn, _samplesCountFogOn);
             var (cpuMeanFogOff, cpuErrFogOff) = ComputeMeanAndErr(_cpuFrameTimesFogOff, _samplesCountFogOff);
-            var (cpuMeanDiff, cpuErrDiff) = ComputeMeanDifference(cpuMeanFogOn, cpuErrFogOn, cpuMeanFogOff, cpuErrFogOff);
+            var (cpuMeanDiff, cpuErrDiff) =
+                ComputeMeanDifference(cpuMeanFogOn, cpuErrFogOn, cpuMeanFogOff, cpuErrFogOff);
 
-            _gpuFogOnLabel.text =  $"  Fog ON:     {gpuMeanFogOn:F3} ms | err: {errFogOn:F3}";
+            _gpuFogOnLabel.text = $"  Fog ON:     {gpuMeanFogOn:F3} ms | err: {errFogOn:F3}";
             _gpuFogOffLabel.text = $"  Fog OFF:    {gpuMeanFogOff:F3} ms | err: {errFogOff:F3}";
-            _gpuDiffLabel.text =   $"  Difference: {gpuMeanDiff:F3} ms | err: {gpuErrDiff:F3}";
+            _gpuDiffLabel.text = $"  Difference: {gpuMeanDiff:F3} ms | err: {gpuErrDiff:F3}";
 
-            _cpuFogOnLabel.text =  $"  Fog ON:     {cpuMeanFogOn:F3} ms | err: {cpuErrFogOn:F3}";
+            _cpuFogOnLabel.text = $"  Fog ON:     {cpuMeanFogOn:F3} ms | err: {cpuErrFogOn:F3}";
             _cpuFogOffLabel.text = $"  Fog OFF:    {cpuMeanFogOff:F3} ms | err: {cpuErrFogOff:F3}";
-            _cpuDiffLabel.text =   $"  Difference: {cpuMeanDiff:F3} ms | err: {cpuErrDiff:F3}";
+            _cpuDiffLabel.text = $"  Difference: {cpuMeanDiff:F3} ms | err: {cpuErrDiff:F3}";
+
+
+            var fogPass = ComputeMeanAndErr(_gpuFogPassTimes, _gpuFogPassSamplesCount);
+            _gpuFogPassTime.text = $"HeightFogPass: {fogPass.average:F3} ms | err: {fogPass.stdErr:F3}";
         }
 
         private void BuildUI()
         {
             var doc = GetComponent<UIDocument>();
-            doc.panelSettings.scale = 0.5f;
+            var scale = 0.5f;
+            doc.panelSettings.scale = scale;
 
             var styleSheet = Resources.Load<StyleSheet>("Styles/PerformanceCounterStyle");
 
@@ -110,25 +136,14 @@ namespace Demo
             _root.style.flexShrink = 0;
             _root.style.flexGrow = 0;
 
+            var safeArea = Screen.safeArea;
+            _root.style.paddingLeft = safeArea.xMin * scale;
+            _root.style.paddingTop = safeArea.yMin * scale;
+            _root.style.paddingRight = (Screen.width - safeArea.xMax) * scale;
+            _root.style.paddingBottom = (Screen.height - safeArea.yMax) * scale;
+
             // Left panel
-            var leftBox = new VisualElement
-            {
-                // style =
-                // {
-                //     alignItems = Align.FlexStart,
-                //     flexDirection = FlexDirection.Column,
-                //     justifyContent = Justify.FlexStart,
-                //     flexGrow = 0,
-                //     flexShrink = 0,
-                //     height = StyleKeyword.Auto,
-                //     width = StyleKeyword.Auto,
-                //     paddingRight = 6,
-                //     paddingLeft = 6,
-                //     paddingTop = 6,
-                //     paddingBottom = 6,
-                //     backgroundColor = new Color(0, 0, 0, 0.5f),
-                // }
-            };
+            var leftBox = new VisualElement();
             leftBox.AddToClassList("panel");
             _root.Add(leftBox);
 
@@ -165,8 +180,12 @@ namespace Demo
             };
             leftBox.Add(_resetButton);
             
-            // Spacer
-            _root.Add(new VisualElement() { style = { width = 4, flexShrink = 0 } });
+            var middleBox = new VisualElement();
+            _root.Add(middleBox);
+            middleBox.AddToClassList("panel");
+            middleBox.Add(new Label("GPU Frame times:"));
+            _gpuFogPassTime = new Label();
+            middleBox.Add(_gpuFogPassTime);
 
             // Right panel
             var rightBox = new VisualElement
@@ -184,17 +203,31 @@ namespace Demo
             _fogToggle.RegisterValueChangedCallback(evt =>
             {
                 _enableFog = evt.newValue;
+                _warmUpFramesCount = 10;
                 if (Volume.profile.TryGet(out HeightFogSettings settings))
                 {
                     settings.active = _enableFog;
                 }
             });
             rightBox.Add(_fogToggle);
+
+            _useAlphaBlendToggle = new Toggle("Use AlphaBlend") { value = _useAlphaBlend };
+            _useAlphaBlendToggle.RegisterValueChangedCallback(evt =>
+            {
+                _useAlphaBlend = evt.newValue;
+                _warmUpFramesCount = 10;
+                if (Volume.profile.TryGet(out HeightFogSettings settings))
+                {
+                    settings.UseAlphaBlend.value = _useAlphaBlend;
+                }
+            });
+            rightBox.Add(_useAlphaBlendToggle);
         }
 
-        private static void AddSample(double[] gpuTimes, double[] cpuTimes, ref long samplesCount, ref FrameTiming frameTiming)
+        private void AddSample(double[] gpuTimes, double[] cpuTimes, ref long samplesCount, ref FrameTiming frameTiming)
         {
             if (frameTiming.gpuFrameTime > 10000.0) return;
+
             gpuTimes[samplesCount % gpuTimes.Length] = frameTiming.gpuFrameTime;
             cpuTimes[samplesCount % gpuTimes.Length] = frameTiming.cpuRenderThreadFrameTime;
             samplesCount++;

@@ -12,5 +12,8 @@ namespace HeightFog.Runtime
         public MinFloatParameter Distance = new(25.0f, 0.001f);
         public FloatParameter Height = new(1.0f);
         public ClampedFloatParameter HeightIntensity = new(0.2f, 0.0f, 1.0f);
+
+        // NOTE: Debug, temp member!
+        public BoolParameter UseAlphaBlend = new(false, true);
     }
 }

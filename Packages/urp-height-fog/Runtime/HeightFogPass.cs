@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
@@ -16,6 +17,7 @@ namespace HeightFog.Runtime
 
         private Color _fogColor;
         private Vector4 _fogParams;
+        private bool _useAlphaBlend;
 
         public HeightFogPass(Material material)
         {
@@ -23,12 +25,13 @@ namespace HeightFog.Runtime
 
             _material = material;
             _isMaterialPresented = _material != null;
+            profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPas);
 
-            // TODO: Для данных глубины используйте возможности URP/камеры. Все решения фиксируются в результате.
+            // NOTE: Only two fullscreen buffer copy of _CameraDepthTexture and _CameraOpaqueTexture made by URP.
             ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
         }
 
-        public void Setup(HeightFogSettings settings)
+        public void Setup(HeightFogSettings settings, bool useAlphaBlend)
         {
             _fogColor = settings.Color.value;
             _fogParams = new Vector4(
@@ -37,6 +40,7 @@ namespace HeightFog.Runtime
                 settings.Height.value,
                 settings.HeightIntensity.value
             );
+            _useAlphaBlend = useAlphaBlend;
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -52,13 +56,15 @@ namespace HeightFog.Runtime
                 return;
             }
 
-            // NOTE: Only one fullscreen buffer copy of _CameraDepthTexture and _CameraOpaqueTexture made by URP.
-            var cmd = CommandBufferPool.Get("Height Fog");
+            var cmd = CommandBufferPool.Get();
+            using (new ProfilingScope(cmd, profilingSampler))
+            {
+                _props.SetColor(FogColorId, _fogColor);
+                _props.SetVector(FogParamsId, _fogParams);
 
-            _props.SetColor(FogColorId, _fogColor);
-            _props.SetVector(FogParamsId, _fogParams);
-
-            BlitUtils.DrawTriangle(cmd, _material, 0, _props);
+                var pass = _useAlphaBlend ? 1 : 0;
+                BlitUtils.DrawTriangle(cmd, _material, pass, _props);
+            }
 
             context.ExecuteCommandBuffer(cmd);
             cmd.Clear();
