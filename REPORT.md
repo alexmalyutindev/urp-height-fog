@@ -41,7 +41,7 @@ So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it 
 ---
 
 ### Test Devices:
-**Nothing SMF Phone 2 Pro** [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
+#### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
 ```yaml
 OS: Android 15
 Chipset: Mediatek Dimensity 7300 Pro (4 nm)
@@ -51,6 +51,18 @@ Benchmarks:
 - AnTuTu 10: 683318
 - GeekBench 6: Multi-core: 2963 | Single-core: 1013
 ```
+
+Times:
+![screen](./Pictures/Screenshot_20251014-143244.png)
+
+|                 | Fog Off   | Fog On    | Fog time |
+|-----------------|-----------|-----------|----------|
+| GPU frame time: | ~10.087ms | ~12.449ms | ~2.363ms |
+| CPU frame time: |           |           |          |
+
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
 
 **Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
 ```yaml
@@ -62,21 +74,17 @@ Benchmarks:
 - GeekBench: 3049 (v5.1)
 ```
 
-### Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
-
-### Timings:
 |                 | Fog Off   | Fog On    | Fog time |
 |-----------------|-----------|-----------|----------|
 | GPU frame time: | ~10.087ms | ~12.449ms | ~2.363ms |
 | CPU frame time: |           |           |          |
 
-![screen](./Pictures/Screenshot_20251014-143244.png)
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
 
 
-
-### MaliOC report for `HeightFog.shader` fragment:
+## MaliOC report for `HeightFog.shader` fragment:
 ```yaml
 Mali Offline Compiler v8.8.0 (Build 888cd7)
 Copyright (c) 2007-2025 Arm Limited. All rights reserved.
