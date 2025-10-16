@@ -1,4 +1,4 @@
-# Screen-Space Height + Distance Fog - Technical Report
+# Screen-Space Height + Distance Fog - Technical Description
 
 ## Executive Summary
 
@@ -126,44 +126,39 @@ I used Unity's builtin `FrameTimingManager` for capturing GPU and CPU time on de
 Additionally I made RenderDoc captures on Nothing and Samsung, but Honor is my friend's device, and only `FrameTimingManager` metric available here.<br>
 For iPad I used XCode FrameProfiler, that provides more detailed results.
 
----
+## Target devices
 
-## Test Results:
+First target device in the requirements was [Xiaomi Redmi Note 13](https://www.gsmarena.com/xiaomi_redmi_note_13-12776.php), 
+which I don't have, but the most suitable device that I have is Nothing SMF Phone 2 Pro (see results below).  
+It also has `Mediatek Dimensity` SoC and `Mali` GPU, but slightly newer.
 
-I'm providing screenshots from app in every result, see "Screenshot" collapsed section.
-
----
-
-**Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
+**Xiaomi Redmi Note 13**
 ```yaml
-OS: Android 15
-Resolution: 1080 x 2340 
-SoC: Qualcomm SM8350 Snapdragon 888 5G (5 nm) 
-CPU: Octa-core (1x2.84 GHz Cortex-X1 & 3x2.42 GHz Cortex-A78 & 4x1.80 GHz Cortex-A55)
-GPU: Adreno (TM) 660
-Benchmarks:
-- AnTuTu: 566529 (v8), 719696 (v9)
-- GeekBench: 3049 (v5.1)
+OS: Android 13, upgradable to Android 14
+Resolution: 1080 x 2400 
+SoC: Mediatek Dimensity 6080 (6 nm)
+CPU: Octa-core (2x2.4 GHz Cortex-A76 & 6x2.0 GHz Cortex-A55)
+GPU: Mali-G57 MC2
 ```
 
-|                                | Fog Off  | Fog On   | Fog Time |
-|--------------------------------|----------|----------|----------|
-| GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
-| CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
-| HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
-| HeightFogPass (RenderDoc)      | -        | -        | ~0.921ms |
+Second device was [Apple iPhone SE (2022)](https://www.gsmarena.com/apple_iphone_se_(2022)-11410.php), 
+instead of it I used [Apple iPad 10.2 (2021)](https://www.gsmarena.com/apple_ipad_10_2_(2021)-11106.php).  
+That device has lower specification than required, but result is still relevant.
 
-Memory:
-- `_CameraDepthTexture_2340x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
-- `_CameraColorAttachmentA_2340x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.64MB (10108800B)
+**Apple iPhone SE (2022)**
+```yaml
+OS: iOS 15.4, upgradable to iOS 26
+Resolution: 750 x 1334
+SoC: Apple A15 Bionic (5 nm)
+CPU: Hexa-core (2x3.22 GHz Avalanche + 4x1.82 GHz Blizzard)
+GPU: Apple GPU (4-core graphics)
+```
 
-<details>
-<summary>Screenshots</summary>
-<img src="./Pictures/sgs21fe/fog-on.jpg"/>
-<img src="./Pictures/sgs21fe/fog-on-alphablend.jpg"/>
-<img src="./Pictures/sgs21fe/renderdoc.png"/>
-</details>
+---
 
+# Test Results:
+
+I'm providing screenshots from app in every result, see "Screenshot" collapsed section.
 
 #### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
 ```yaml
@@ -200,6 +195,37 @@ Memory:
 </details>
 
 
+**Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
+```yaml
+OS: Android 15
+Resolution: 1080 x 2340 
+SoC: Qualcomm SM8350 Snapdragon 888 5G (5 nm) 
+CPU: Octa-core (1x2.84 GHz Cortex-X1 & 3x2.42 GHz Cortex-A78 & 4x1.80 GHz Cortex-A55)
+GPU: Adreno (TM) 660
+Benchmarks:
+- AnTuTu: 566529 (v8), 719696 (v9)
+- GeekBench: 3049 (v5.1)
+```
+
+|                                | Fog Off  | Fog On   | Fog Time |
+|--------------------------------|----------|----------|----------|
+| GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
+| CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
+| HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
+| HeightFogPass (RenderDoc)      | -        | -        | ~0.921ms |
+
+Memory:
+- `_CameraDepthTexture_2340x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
+- `_CameraColorAttachmentA_2340x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.64MB (10108800B)
+
+<details>
+<summary>Screenshots</summary>
+<img src="./Pictures/sgs21fe/fog-on.jpg"/>
+<img src="./Pictures/sgs21fe/fog-on-alphablend.jpg"/>
+<img src="./Pictures/sgs21fe/renderdoc.png"/>
+</details>
+
+
 **Honor 400** [[GSM Arena](https://www.gsmarena.com/honor_400_5g-13799.php)]
 ```yaml
 OS: Android 15
@@ -228,7 +254,7 @@ Memory:
 <img src="./Pictures/honor400/fog-on-alphablend.jpg"/>
 </details>
 
-**Apple iPad 10.2 (2021)**
+**Apple iPad 10.2 (2021)**[[GSM Arena](https://www.gsmarena.com/apple_ipad_10_2_(2021)-11106.php)]
 ```yaml
 OS: iPadOS 18.6.2
 Resolution: 1620 x 2160
