@@ -1,17 +1,12 @@
 # Screen-Space Height + Distance Fog - Technical Report
+
 ## Executive Summary
-Implemented a mobile-optimized URP RenderFeature for combined height and distance fog with minimal performance overhead (~2.3ms GPU on mid-range devices). The solution uses a single full-screen pass with adaptive blending strategies based on GPU architecture.
+
+Implemented a mobile-optimized URP RenderFeature for combined height and distance fog with minimal performance overhead.
+The solution uses a single full-screen pass with adaptive blending strategies based on GPU architecture.
 
 **Unity Version:** 6.0.59f1 (upgraded from 6.0.56f1 due to security vulnerabilities)<br>
 **URP Version:** 17.0.4<br>
-**Target Devices:** Nothing CMF Phone 2 Pro, Samsung Galaxy S21 FE 5G<br>
-
-
-### Main points:
-- I have chosen Unity 6.0.59f1 instead of 6.0.56f1 because of security vulnerability.
-- The `HeightFogFeature` pass is injected at `RenderPassEvent.BeforeRenderingTransparents`.
-- Feature is using URP's DepthCopy `_CameraDepthTexture` for fog calculation, and ColorCopy `_CameraOpaqueTexture` for blending.
-- For some chips instead of direct AlphaBlend mode, I'm using manual blending with `_CameraOpaqueTexture`, that gives slightly better results.
 
 ---
 
@@ -36,10 +31,9 @@ Implemented a mobile-optimized URP RenderFeature for combined height and distanc
 
 ### Injection Point: `RenderPassEvent.BeforeRenderingTransparents`
 **Rationale:**
-1. **Depth Buffer Access:** At this point, all opaque and AlphaTest geometry has been rendered, providing complete `_CameraDepthTexture`
-2. **Color Buffer Availability:** URP's `_CameraOpaqueTexture` is available after Skybox pass, allowing manual blending
-3. **UI Preservation:** HUD/UI elements rendered in overlay mode remain unaffected as they render after this event. WorldSpace UI should be rendered after Fog or before, with stencil write.
-4. **Performance Trade-off:** Single pass before transparents is cheaper than per-object fog in shaders
+- **Depth Buffer Access:** At this point, all opaque and AlphaTest geometry has been rendered, providing complete `_CameraDepthTexture`
+- **Color Buffer Availability:** URP's `_CameraOpaqueTexture` is available after Skybox pass, allowing manual blending
+- **UI Preservation:** HUD/UI elements rendered in overlay mode remain unaffected as they render after this event. WorldSpace UI should be rendered after Fog or before, with stencil write.
 
 **Visual Impact:**
 - ✅ Fog correctly applies to all opaque geometry and skybox
@@ -69,26 +63,16 @@ The implementation uses **zero custom intermediate buffers**. All required data 
 ### Count: **0 additional copies, 0 additional RT switches**
 **Breakdown:**
 - **Existing URP copies** (not added by fog):
-    - DepthCopy → `_CameraDepthTexture` (required by URP for depth testing)
-    - ColorCopy → `_CameraOpaqueTexture` (required for manual blending)
+    - DepthCopy: `_CameraDepthTexture` (required by URP for depth testing)
+    - ColorCopy: `_CameraOpaqueTexture` (required for manual blending)
 - **FogPass operations:**
     - 1 full-screen draw directly to camera target (no copy)
     - 0 RT switches (renders to already active target)
 
-**Optimization Notes:**
-- Manual blending mode requires `_CameraOpaqueTexture`, but if this buffer is in use in RenderPipeline, additional cost is already paid
-- On devices where hardware AlphaBlend is efficient (Adreno GPUs), we use it to skip color buffer access entirely
-- Tested low-resolution rendering with upscaling (+2 buffers, +1 copy) but measured performance was **worse** due to upscale quality issues and additional memory bandwidth
-
-
-## Blending Strategy: Platform-Adaptive
-### Problem
-Different mobile GPU architectures show different performance characteristics for blending operations:
-
-| GPU Family      | Hardware AlphaBlend  | Manual Blend             |  Winner  |
-|-----------------|----------------------|--------------------------|----------|
-| Mali (G615 MC2) | Slower               | **Faster** (~0.3ms gain) | Manual   |
-| Adreno (660)    | **Faster**           | Slower (~0.2ms loss)     | Hardware |
+### Optimization Notes
+Manual blending mode requires `_CameraOpaqueTexture`, but if this buffer is already in use in RenderPipeline, 
+additional cost is already paid and we good to go.<br>
+On devices where hardware AlphaBlend is more efficient, I use it to skip color buffer access entirely.
 
 ---
 
@@ -102,13 +86,14 @@ This to factors multiplied into final fog density.
 
 ### Optimization Notes
 - Single texture sample for depth (position reconstructed from depth + screen UV)
-- Uses `1/(1+x)` or `exp2(-x)` for fast density calculation on mobile GPUs
+- Uses `1/(1+x)` for fast density calculation on mobile GPUs
 - Optimized matrix multiplication in vertex pass for `viewDirectionVS`
-- Early exit when camera is above fog and ray misses fog volume by distance
+- Early exit when camera is above fog and ray misses fog volume
+- Using `half` instead of `float` for operations optimization (but some types still controlled Unity ex. ConstantBuffers, it uses `float`)
 
 ---
 
-## Alternative rendering optimizations (low-res rendering)
+## Alternative rendering optimization (low-res rendering)
 
 One of ideas, that come naturally, is to render in smaller target, and upscale after - that makes main fog calculation chipper.
 This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be really small (ex. 1/4 of frame buffer), 
@@ -124,36 +109,26 @@ Earlier iterations on this approach gives worse performance results and I've dec
 
 ---
 
-### Test Results:
+## Test Results:
 
-#### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
-```yaml
-OS: Android 15
-Resolution: 1080 x 2392
-SoC: Mediatek Dimensity 7300 Pro (4 nm)
-CPU: Octa-core (4x2.5 GHz Cortex-A78 & 4x2.0 GHz Cortex-A55)
-GPU: Mali-G615 MC2
-Benchmarks:
-- AnTuTu 10: 683318
-- GeekBench 6: Multi-core: 2963 | Single-core: 1013
-```
+I have tested several Android devices with Mali and Adreno GPUs and iPad with A13 chip.<br>
+I used Unity's builtin `FrameTimingManager` for capturing GPU and CPU time on device and `ProfilingSampler.gpuElapsedTime` specific for `HeightFogPass`.<br>
+Additionally I made RenderDoc captures on Nothing and Samsung, but Honor is my friend's device, and only `FrameTimingManager` metric available here.<br>
+For iPad I used XCode FrameProfiler, that provides more detailed results.
 
-|                                | Fog Off  | Fog On    | Fog Time |
-|--------------------------------|----------|-----------|----------|
-| GPU frame time                 | ~8.545ms | ~10.550ms | ~2.004ms |
-| CPU frame time                 | ~1.875ms | ~2.261ms  | ~0.386ms |
-| HeightFogPass (ProfilerMarker) | -        | -         | ~3.794ms | 
-| HeightFogPass (RenderDoc)      | -        | -         | ~1.514ms |
+I'm providing screenshots from app in every device result, see "Screenshot" collapsed section.
 
-Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
+| Device                                  | FrameTimingManager.gpuTime |  FrameTimingManager.cpuTime |           HeightFogPass Time |
+|-----------------------------------------|---------------------------:|----------------------------:|-----------------------------:|
+| **Samsung S21 FE 5G (Adreno 660)**      |                   ~2.57 ms |                    ~0.33 ms |         ~0.92 ms (RenderDoc) |
+| **Nothing CMF Phone 2 Pro (Mali G615)** |                   ~2.00 ms |                    ~0.39 ms |         ~1.51 ms (RenderDoc) |
+| **Honor 400 (Adreno 720)**              |                   ~1.07 ms |                    ~0.43 ms | ~2.02 ms (PerformanceMarker) |
+| **iPad 10.2 (2021)**                    |                   ~2.67 ms |                    ~0.16 ms |             ~0.95 ms (Xcode) |
 
-<details>
-<summary>Screenshots</summary>
-<img src="./Pictures/cmf2/fog-on.png"/>
-<img src="./Pictures/cmf2/renderdoc.png"/>
-</details>
+Average GPU cost: **~2.0–2.6 ms/frame**  
+Average CPU cost: **< 0.5 ms/frame**
+
+---
 
 **Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
 ```yaml
@@ -180,9 +155,46 @@ Memory:
 
 <details>
 <summary>Screenshots</summary>
-<img src="./Pictures/sgs21fe/fog-on.jpg" width=50%/><img src="./Pictures/sgs21fe/fog-on-alphablend.jpg" width=50%/>
-<img src="./Pictures/sgs21fe/renderdoc.png" width=50%/>
+<img src="./Pictures/sgs21fe/fog-on.jpg"/>
+<img src="./Pictures/sgs21fe/fog-on-alphablend.jpg"/>
+<img src="./Pictures/sgs21fe/renderdoc.png"/>
 </details>
+
+
+#### Nothing SMF Phone 2 Pro [[GSM Arena](https://www.gsmarena.com/nothing_cmf_phone_2_pro_5g-13821.php)]
+```yaml
+OS: Android 15
+Resolution: 1080 x 2392
+SoC: Mediatek Dimensity 7300 Pro (4 nm)
+CPU: Octa-core (4x2.5 GHz Cortex-A78 & 4x2.0 GHz Cortex-A55)
+GPU: Mali-G615 MC2
+Benchmarks:
+- AnTuTu 10: 683318
+- GeekBench 6: Multi-core: 2963 | Single-core: 1013
+```
+
+> **Notes:**<br>
+> Nothing SMF Phone 2 Pro shows most unstable result, it's metric jumps from 2ms up to 5ms, and this time difference comes mostly from base rendering time difference (without fog).
+> Looks like phone's drives make some wierd vSync, that snaps frame time to match 60fps or 120fps rate.
+> With such behaviour this is really hard to profile on it.
+
+|                                | Fog Off  | Fog On    | Fog Time |
+|--------------------------------|----------|-----------|----------|
+| GPU frame time                 | ~8.545ms | ~10.550ms | ~2.004ms |
+| CPU frame time                 | ~1.875ms | ~2.261ms  | ~0.386ms |
+| HeightFogPass (ProfilerMarker) | -        | -         | ~3.794ms | 
+| HeightFogPass (RenderDoc)      | -        | -         | ~1.514ms |
+
+Memory:
+- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
+- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
+
+<details>
+<summary>Screenshots</summary>
+<img src="./Pictures/cmf2/fog-on.png"/>
+<img src="./Pictures/cmf2/renderdoc.png"/>
+</details>
+
 
 **Honor 400** [[GSM Arena](https://www.gsmarena.com/honor_400_5g-13799.php)]
 ```yaml
@@ -208,8 +220,8 @@ Memory:
 
 <details>
 <summary>Screenshots</summary>
-<img src="./Pictures/honor400/fog-on.jpg" width=50%/><img src="./Pictures/honor400/fog-off.jpg" width=50%/>
-<img src="./Pictures/honor400/fog-on-alphablend.jpg" width=50%/><img src="./Pictures/honor400/fog-off-alphablend.jpg" width=50%/>
+<img src="./Pictures/honor400/fog-on.jpg"/>
+<img src="./Pictures/honor400/fog-on-alphablend.jpg"/>
 </details>
 
 **Apple iPad 10.2 (2021)**
@@ -224,6 +236,11 @@ Benchmarks:
 - GeekBench: 3124 (v5.1)
 ```
 
+> **Notes:**<br>
+> Most reliable data comes from iPad, due amazing XCode profiling abilities.<br>
+> In XCode HeightFog shader executed ~0.952ms, on the other hand CopyColor: ~0.535ms and CopyDepth: ~0.626ms.
+> That is ~0.4ms of fog math overhead, looks good to me.
+
 |                       | Fog Off  | Fog On   | Fog Time |
 |-----------------------|----------|----------|----------|
 | GPU frame time        | ~3,784ms | ~6,455ms | ~2,671ms |
@@ -236,8 +253,11 @@ Memory:
 
 <details>
 <summary>Screenshots</summary>
-<img src="./Pictures/ipada13/fog-on.png" width=50%/><img src="./Pictures/ipada13/xcode-fog.png" width=50%/>
-<img src="./Pictures/ipada13/xcode-depth.png" width=50%/><img src="./Pictures/ipada13/xcode-color.png" width=50%/>
+<img src="./Pictures/ipada13/fog-on.png"/>
+<img src="./Pictures/ipada13/xcode-fog.png"/>
+<img src="./Pictures/ipada13/xcode-perf.png"/>
+<img src="./Pictures/ipada13/xcode-depth.png"/>
+<img src="./Pictures/ipada13/xcode-color.png"/>
 </details>
 
 ---
@@ -282,44 +302,3 @@ Uses late ZS test: false
 Uses late ZS update: false
 Reads color buffer: false
 ```
-
----
-
-<details>
-<summary>Draft</summary>
-
-## Details:
-### Queue and Transparency
-The fog rendered in one DrawCall at `RenderPassEvent.BeforeRenderingTransparents` as a full screen effect, 
-right after `Skybox` and before `Transparents` pass.
-The pass uses Queue to be able to use DepthCopy and ColorCopy buffers, that made after Opaque and AlphaTest geometry. 
-With such queue, the feature doesn't properly interact with Transparent geometry.
-
-Alternative solution to support Transparent geometry, it is moving fog calculation into Transparent shader,
-but it will be more costly and AlphaBlend still will present more visual issues.<br>
-Another way is storing separate `_FogBackDepth` buffer of fog far surface and depending on distance to it, apply fog by normalized distance,
-but it will also present separate `_FogDensity` buffer and increase feature cost.<br>
-I decided to keep it simple, just to render it in one pass, without presenting additional buffers, but sacrifice Transparent geometry.
-
-### Fog evaluation
-The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)`
-for computing transmittance. This math is mostly optimized, and split in to factors:
-thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
-This to factors multiplied into final fog density.
-
-### Applying of the fog
-For rendering/blending fog into the scene, I've tested several solutions:
-- Manual AlphaBlend in fog shader - gives good result, but requires `CopyColor`, if it's already presented, the cast already paid and we good to go. 
-- `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, it performs worse on `Mali-G615 MC2` but better on `Adreno (TM) 660`.
-- Render in smaller target, and upscale after - this makes main shader chipper, but adds memory overhead of two new low-res buffer: 
-`_MaxSceneDepth` and `_FogDensity_MaxDepth`. And also adds cost of depth-guided upscaling (5 texture samples), 
-which often presents visual bugs around thing objects or holes.<br>
-There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_FogMinMaxDensity_MinMaxDepth`, compute two fog vales at the same time and 
-then using more data for upscaling will reduce visual artefacts.<br>
-But earlier iterations on this approach gives worse performance.
-
-So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it depending on the running device. 
-
----
-
-</details>
