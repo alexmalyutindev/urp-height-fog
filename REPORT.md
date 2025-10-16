@@ -2,8 +2,8 @@
 
 ## Executive Summary
 
-Implemented a mobile-optimized URP RenderFeature for combined height and distance fog with minimal performance overhead.
-The solution uses a single full-screen pass with adaptive blending strategies based on GPU architecture.
+This project implements a mobile-optimized URP RenderFeature that combines height-based+distance fog into a single, 
+efficient full-screen pass with minimal GPU overhead.
 
 **Unity Version:** 6.0.59f1 (upgraded from 6.0.56f1 due to security vulnerabilities)<br>
 **URP Version:** 17.0.4<br>
@@ -93,9 +93,15 @@ This to factors multiplied into final fog density.
 
 ---
 
-## Alternative rendering optimization (low-res rendering)
 
-One of ideas, that come naturally, is to render in smaller target, and upscale after - that makes main fog calculation chipper.
+
+---
+
+## Direction for improvements aka. alternative rendering optimization (low-res rendering)
+
+One of ideas, that comes naturally, is to render fog in to smaller target, and upscale it later - 
+that reduces arithmetic cost but introduces additional memory overhead and upscaling artifacts.
+
 This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be really small (ex. 1/4 of frame buffer), 
 but still adds memory footprint and preparing them, also adds computation cost.<br>
 And also there is a cost of Depth-Guided Upscaling (at least 5 texture samples in full resolution), 
@@ -109,24 +115,22 @@ Earlier iterations on this approach gives worse performance results and I've dec
 
 ---
 
-## Test Results:
+## Profiling Tools Used
+- UnityProfiler (`ProfilingSampler` inside build)
+- RenderDoc (on Android devices)
+- XCode (on iPad)
+- Unity's `FrameTimingManager`
 
 I have tested several Android devices with Mali and Adreno GPUs and iPad with A13 chip.<br>
 I used Unity's builtin `FrameTimingManager` for capturing GPU and CPU time on device and `ProfilingSampler.gpuElapsedTime` specific for `HeightFogPass`.<br>
 Additionally I made RenderDoc captures on Nothing and Samsung, but Honor is my friend's device, and only `FrameTimingManager` metric available here.<br>
 For iPad I used XCode FrameProfiler, that provides more detailed results.
 
-I'm providing screenshots from app in every device result, see "Screenshot" collapsed section.
+---
 
-| Device                                  | FrameTimingManager.gpuTime |  FrameTimingManager.cpuTime |           HeightFogPass Time |
-|-----------------------------------------|---------------------------:|----------------------------:|-----------------------------:|
-| **Samsung S21 FE 5G (Adreno 660)**      |                   ~2.57 ms |                    ~0.33 ms |         ~0.92 ms (RenderDoc) |
-| **Nothing CMF Phone 2 Pro (Mali G615)** |                   ~2.00 ms |                    ~0.39 ms |         ~1.51 ms (RenderDoc) |
-| **Honor 400 (Adreno 720)**              |                   ~1.07 ms |                    ~0.43 ms | ~2.02 ms (PerformanceMarker) |
-| **iPad 10.2 (2021)**                    |                   ~2.67 ms |                    ~0.16 ms |             ~0.95 ms (Xcode) |
+## Test Results:
 
-Average GPU cost: **~2.0–2.6 ms/frame**  
-Average CPU cost: **< 0.5 ms/frame**
+I'm providing screenshots from app in every result, see "Screenshot" collapsed section.
 
 ---
 
@@ -175,8 +179,8 @@ Benchmarks:
 
 > **Notes:**<br>
 > Nothing SMF Phone 2 Pro shows most unstable result, it's metric jumps from 2ms up to 5ms, and this time difference comes mostly from base rendering time difference (without fog).
-> Looks like phone's drives make some wierd vSync, that snaps frame time to match 60fps or 120fps rate.
-> With such behaviour this is really hard to profile on it.
+> Looks like phone's driver makes some weird vSync, that snaps frame time to match 60fps or 120fps rate.
+> With such behaviour, this makes precise GPU profiling unreliable on this device
 
 |                                | Fog Off  | Fog On    | Fog Time |
 |--------------------------------|----------|-----------|----------|
@@ -260,9 +264,24 @@ Memory:
 <img src="./Pictures/ipada13/xcode-color.png"/>
 </details>
 
+**Summary:**
+
+| Device                                  | FrameTimingManager.gpuTime |  FrameTimingManager.cpuTime |           HeightFogPass Time |
+|-----------------------------------------|---------------------------:|----------------------------:|-----------------------------:|
+| **Samsung S21 FE 5G (Adreno 660)**      |                   ~2.57 ms |                    ~0.33 ms |         ~0.92 ms (RenderDoc) |
+| **Nothing CMF Phone 2 Pro (Mali G615)** |                   ~2.00 ms |                    ~0.39 ms |         ~1.51 ms (RenderDoc) |
+| **Honor 400 (Adreno 720)**              |                   ~1.07 ms |                    ~0.43 ms | ~2.02 ms (PerformanceMarker) |
+| **iPad 10.2 (2021)**                    |                   ~2.67 ms |                    ~0.16 ms |             ~0.95 ms (Xcode) |
+
+Average GPU cost: **~2.0–2.6 ms/frame**  
+Average CPU cost: **< 0.5 ms/frame**
+
 ---
 
 ## MaliOC report for `HeightFog.shader` fragment:
+
+The Mali Offline Compiler analysis confirms the shader’s balanced ALU and texture workloads with no register pressure or memory bottlenecks.
+
 ```yaml
 Mali Offline Compiler v8.8.0 (Build 888cd7)
 Copyright (c) 2007-2025 Arm Limited. All rights reserved.
