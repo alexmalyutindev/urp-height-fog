@@ -257,7 +257,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0b3892d155df46c184de1791285f3f2b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Font: {fileID: 12800000, guid: e1c4ebf49e48f4df99aa002ce7a9ab20, type: 3}
   Volume: {fileID: 1439517881}
 --- !u!114 &54411903
 MonoBehaviour:
@@ -1016,6 +1015,7 @@ GameObject:
   - component: {fileID: 1806110567}
   - component: {fileID: 1806110566}
   - component: {fileID: 1806110569}
+  - component: {fileID: 1806110570}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1141,6 +1141,19 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!114 &1806110570
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1806110565}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f592699a683140eca63f2be58bd2bc8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Enable: 1
 --- !u!1 &1807568881
 GameObject:
   m_ObjectHideFlags: 0

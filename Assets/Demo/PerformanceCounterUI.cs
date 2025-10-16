@@ -84,8 +84,11 @@ namespace Demo
             {
                 AddSample(_gpuFrameTimesFogOn, _cpuFrameTimesFogOn, ref _samplesCountFogOn, ref _frameTimings[0]);
 
-                _gpuFogPassTimes[_gpuFogPassSamplesCount % _gpuFogPassTimes.Length] = _profilingSampler.gpuElapsedTime;
-                _gpuFogPassSamplesCount++;
+                if (_profilingSampler != null)
+                {
+                    _gpuFogPassTimes[_gpuFogPassSamplesCount % _gpuFogPassTimes.Length] = _profilingSampler.gpuElapsedTime;
+                    _gpuFogPassSamplesCount++;
+                }
             }
             else
             {
