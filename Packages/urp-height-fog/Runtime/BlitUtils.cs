@@ -59,7 +59,11 @@ namespace HeightFog.Runtime
 
         public static void CleanUp()
         {
-            if (s_TriangleMesh != null) Object.Destroy(s_TriangleMesh);
+            if (s_TriangleMesh != null)
+            {
+                if (Application.isPlaying) Object.Destroy(s_TriangleMesh);
+                else Object.DestroyImmediate(s_TriangleMesh);
+            }
         }
     }
 }

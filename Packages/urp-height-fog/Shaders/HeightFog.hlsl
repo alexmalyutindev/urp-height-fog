@@ -10,6 +10,14 @@ half4 _FogParams;
 #define _FogPlaneY (_FogParams.z)
 #define _FogHeightIntensity (_FogParams.w)
 
+inline void GetFogParams(out half density, out half distance, out half planeY, out half heightIntensity)
+{
+    density = _FogParams.x;
+    distance = _FogParams.y;
+    planeY = _FogParams.z;
+    heightIntensity = _FogParams.w;
+}
+
 inline half ComputeFogDensity(half thickness)
 {
     #if defined(HEIGHT_FOG_EXP2)
