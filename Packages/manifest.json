@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.alexmalyutindev.malioc": "https://github.com/alexmalyutindev/unity-malioc-shader-analyzer.git",
     "com.unity.ide.rider": "3.0.38",
     "com.unity.mobile.android-logcat": "1.4.6",
     "com.unity.multiplayer.center": "1.0.0",
