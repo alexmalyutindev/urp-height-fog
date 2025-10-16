@@ -80,7 +80,7 @@ On devices where hardware AlphaBlend is more efficient, I use it to skip color b
 
 ### Mathematical Model
 The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)` or `1/(1+thickness)`
-for computing transmittance. This math is mostly optimized, and split in to factors:
+for computing transmittance. This math is mostly optimized, and split in two factors:
 thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
 This to factors multiplied into final fog density.
 
@@ -102,7 +102,7 @@ This to factors multiplied into final fog density.
 One of ideas, that comes naturally, is to render fog in to smaller target, and upscale it later - 
 that reduces arithmetic cost but introduces additional memory overhead and upscaling artifacts.
 
-This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be really small (ex. 1/4 of frame buffer), 
+This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be tiny (ex. 1/4 of frame buffer), 
 but still adds memory footprint and preparing them, also adds computation cost.<br>
 And also there is a cost of Depth-Guided Upscaling (at least 5 texture samples in full resolution), 
 that often presents visual bugs around 'thin' depth pixels ('cus of loss of detalization in DepthBuffer after downscale).<br>
@@ -111,7 +111,7 @@ There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_Fog
 compute two fog vales at the same time and then using more data for upscaling will reduce visual artefacts.<br>
 But this will increase memory bandwidth on fog rendering step and after on upscale step.
 
-Earlier iterations on this approach gives worse performance results and I've decided not to move feather in that direction.
+Earlier iterations on this approach gives worse performance results, and I've decided not to move feather in that direction.
 
 ---
 
