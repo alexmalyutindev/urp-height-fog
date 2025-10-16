@@ -11,7 +11,7 @@ Implemented a mobile-optimized URP RenderFeature for combined height and distanc
 - I have chosen Unity 6.0.59f1 instead of 6.0.56f1 because of security vulnerability.
 - The `HeightFogFeature` pass is injected at `RenderPassEvent.BeforeRenderingTransparents`.
 - Feature is using URP's DepthCopy `_CameraDepthTexture` for fog calculation, and ColorCopy `_CameraOpaqueTexture` for blending.
-- Instead of using direct AlphaBlend mode in shader, I'm using manual blending with `_CameraOpaqueTexture`, that gives slightly better results on Mali chip.
+- For some chips instead of direct AlphaBlend mode, I'm using manual blending with `_CameraOpaqueTexture`, that gives slightly better results.
 
 ---
 
@@ -121,11 +121,11 @@ Benchmarks:
 - GeekBench 6: Multi-core: 2963 | Single-core: 1013
 ```
 
-|                                | Fog Off   | Fog On    | Fog Time |
-|--------------------------------|-----------|-----------|----------|
-| GPU frame time                 | ~10.087ms | ~12.449ms | ~2.363ms |
-| CPU frame time                 |           |           | TODO     |
-| HeightFogPass (ProfilerMarker) | -         | -         | TODO     |
+|                                | Fog Off  | Fog On    | Fog Time |
+|--------------------------------|----------|-----------|----------|
+| GPU frame time                 | ~8.545ms | ~10.550ms | ~2.004ms |
+| CPU frame time                 | ~1.875ms | ~2.261ms  | ~0.386ms |
+| HeightFogPass (ProfilerMarker) | -        | -         | ~3.794ms |
 
 Memory:
 - `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
@@ -133,6 +133,7 @@ Memory:
 
 <details>
 <summary>TODO: Screenshots</summary>
+<img src="./Pictures/smf2/fog-on.png" width=50%/><img src="./Pictures/smf2/renderdoc.png" width=50%/>
 </details>
 
 **Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
@@ -154,8 +155,8 @@ Benchmarks:
 | HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
 
 Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.64MB (10108800B)
+- `_CameraDepthTexture_2340x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
+- `_CameraColorAttachmentA_2340x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.64MB (10108800B)
 
 <details>
 <summary>Screenshots</summary>
@@ -181,8 +182,8 @@ Benchmarks:
 | HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
 
 Memory:
-- `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~13.19MB (13833216B)
-- `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~13.19MB (13833216B)
+- `_CameraDepthTexture_2736x1264_R32_SFloat_Tex2D` : ~13.19MB (13833216B)
+- `_CameraColorAttachmentA_2736x1264_B10G11R11_UFloatPack32_Tex2D` : ~13.19MB (13833216B)
 
 <details>
 <summary>Screenshots</summary>
@@ -190,50 +191,33 @@ Memory:
 <img src="./Pictures/honor400/fog-on-alphablend.jpg" width=50%/><img src="./Pictures/honor400/fog-off-alphablend.jpg" width=50%/>
 </details>
 
+**Apple iPad 10.2 (2021)**
+```yaml
+OS: iPadOS 18.6.2
+Resolution: 1620 x 2160
+SoC: Apple A13 Bionic (7 nm+)
+CPU: Hexa-core (2x2.65 GHz Lightning + 4x1.8 GHz Thunder)
+GPU: Apple GPU (4-core graphics)
+Benchmarks:
+- AnTuTu: 617292(v9)
+- GeekBench: 3124 (v5.1)
+```
 
+|                                | Fog Off  | Fog On   | Fog Time |
+|--------------------------------|----------|----------|----------|
+| GPU frame time                 | ~3,784ms | ~6,455ms | ~2,671ms |
+| CPU frame time                 | ~1,804ms | ~1,967ms | ~0,163ms |
+| HeightFogPass (ProfilerMarker) | -        | -        | -        |
 
+Memory:
+- `_CameraDepthTexture_2160x1620_R32_SFloat_Tex2D` : ~13.35MB (13996800B)
+- `_CameraColorAttachmentA_2160x1620_B10G11R11_UFloatPack32_Tex2D` : ~13.35MB (13996800B)
 
-
-
-
-
----
-# OLD
----
-
-## Details:
-### Queue and Transparency
-The fog rendered in one DrawCall at `RenderPassEvent.BeforeRenderingTransparents` as a full screen effect, 
-right after `Skybox` and before `Transparents` pass.
-The pass uses Queue to be able to use DepthCopy and ColorCopy buffers, that made after Opaque and AlphaTest geometry. 
-With such queue, the feature doesn't properly interact with Transparent geometry.
-
-Alternative solution to support Transparent geometry, it is moving fog calculation into Transparent shader,
-but it will be more costly and AlphaBlend still will present more visual issues.<br>
-Another way is storing separate `_FogBackDepth` buffer of fog far surface and depending on distance to it, apply fog by normalized distance,
-but it will also present separate `_FogDensity` buffer and increase feature cost.<br>
-I decided to keep it simple, just to render it in one pass, without presenting additional buffers, but sacrifice Transparent geometry.
-
-### Fog evaluation
-The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)`
-for computing transmittance. This math is mostly optimized, and split in to factors:
-thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
-This to factors multiplied into final fog density.
-
-### Applying of the fog
-For rendering/blending fog into the scene, I've tested several solutions:
-- Manual AlphaBlend in fog shader - gives good result, but requires `CopyColor`, if it's already presented, the cast already paid and we good to go. 
-- `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, it performs worse on `Mali-G615 MC2` but better on `Adreno (TM) 660`.
-- Render in smaller target, and upscale after - this makes main shader chipper, but adds memory overhead of two new low-res buffer: 
-`_MaxSceneDepth` and `_FogDensity_MaxDepth`. And also adds cost of depth-guided upscaling (5 texture samples), 
-which often presents visual bugs around thing objects or holes.<br>
-There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_FogMinMaxDensity_MinMaxDepth`, compute two fog vales at the same time and 
-then using more data for upscaling will reduce visual artefacts.<br>
-But earlier iterations on this approach gives worse performance.
-
-So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it depending on the running device. 
-
----
+<details>
+<summary>Screenshots</summary>
+<img src="./Pictures/ipada13/fog-on.png" width=50%/><img src="./Pictures/ipada13/xcode-fog.png" width=50%/>
+<img src="./Pictures/ipada13/xcode-depth.png" width=50%/><img src="./Pictures/ipada13/xcode-color.png" width=50%/>
+</details>
 
 ---
 
@@ -277,3 +261,45 @@ Uses late ZS test: false
 Uses late ZS update: false
 Reads color buffer: false
 ```
+
+
+
+
+---
+# OLD
+---
+
+## Details:
+### Queue and Transparency
+The fog rendered in one DrawCall at `RenderPassEvent.BeforeRenderingTransparents` as a full screen effect, 
+right after `Skybox` and before `Transparents` pass.
+The pass uses Queue to be able to use DepthCopy and ColorCopy buffers, that made after Opaque and AlphaTest geometry. 
+With such queue, the feature doesn't properly interact with Transparent geometry.
+
+Alternative solution to support Transparent geometry, it is moving fog calculation into Transparent shader,
+but it will be more costly and AlphaBlend still will present more visual issues.<br>
+Another way is storing separate `_FogBackDepth` buffer of fog far surface and depending on distance to it, apply fog by normalized distance,
+but it will also present separate `_FogDensity` buffer and increase feature cost.<br>
+I decided to keep it simple, just to render it in one pass, without presenting additional buffers, but sacrifice Transparent geometry.
+
+### Fog evaluation
+The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)`
+for computing transmittance. This math is mostly optimized, and split in to factors:
+thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
+This to factors multiplied into final fog density.
+
+### Applying of the fog
+For rendering/blending fog into the scene, I've tested several solutions:
+- Manual AlphaBlend in fog shader - gives good result, but requires `CopyColor`, if it's already presented, the cast already paid and we good to go. 
+- `AlphaBlend SrcAlpha OneMinusSrcAlpha` in fog shader - gives good result, it performs worse on `Mali-G615 MC2` but better on `Adreno (TM) 660`.
+- Render in smaller target, and upscale after - this makes main shader chipper, but adds memory overhead of two new low-res buffer: 
+`_MaxSceneDepth` and `_FogDensity_MaxDepth`. And also adds cost of depth-guided upscaling (5 texture samples), 
+which often presents visual bugs around thing objects or holes.<br>
+There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_FogMinMaxDensity_MinMaxDepth`, compute two fog vales at the same time and 
+then using more data for upscaling will reduce visual artefacts.<br>
+But earlier iterations on this approach gives worse performance.
+
+So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it depending on the running device. 
+
+---
+
