@@ -28,7 +28,7 @@ namespace HeightFog.Runtime
 
             _material = material;
             _isMaterialPresented = _material != null;
-            profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPas);
+            profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPass);
 
             
             _useManualBlend = IsGPUPreferManualBlend();

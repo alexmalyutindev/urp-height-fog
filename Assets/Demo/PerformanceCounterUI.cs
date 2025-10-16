@@ -59,7 +59,7 @@ namespace Demo
                 $"Resolution:   {Screen.currentResolution}";
 
             BuildUI();
-            _profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPas);
+            _profilingSampler = ProfilingSampler.Get(CustomRenderFeature.HeightFogPass);
             _profilingSampler.enableRecording = true;
         }
 
