@@ -95,15 +95,32 @@ Different mobile GPU architectures show different performance characteristics fo
 ## Fog Calculation Details
 
 ### Mathematical Model
-
-TODO: 
+The math for fog shader is quite simple: compute CameraRay vs FogVolume intersection thickness, and use `exp2(-thickness)` or `1/(1+thickness)`
+for computing transmittance. This math is mostly optimized, and split in to factors:
+thicknessFactor that counts only fog distance and separate heightFactor that counts only reconstructed from depth positionWS.z.
+This to factors multiplied into final fog density.
 
 ### Optimization Notes
-- Factored calculation allows early-out when `heightFactor = 0` (above fog)
 - Single texture sample for depth (position reconstructed from depth + screen UV)
-- Uses `1/(1+x)` or `exp2()` for fast density calculation on mobile GPUs
+- Uses `1/(1+x)` or `exp2(-x)` for fast density calculation on mobile GPUs
 - Optimized matrix multiplication in vertex pass for `viewDirectionVS`
-- TODO:
+- Early exit when camera is above fog and ray misses fog volume by distance
+
+---
+
+## Alternative rendering optimizations (low-res rendering)
+
+One of ideas, that come naturally, is to render in smaller target, and upscale after - that makes main fog calculation chipper.
+This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be really small (ex. 1/4 of frame buffer), 
+but still adds memory footprint and preparing them, also adds computation cost.<br>
+And also there is a cost of Depth-Guided Upscaling (at least 5 texture samples in full resolution), 
+that often presents visual bugs around 'thin' depth pixels ('cus of loss of detalization in DepthBuffer after downscale).<br>
+
+There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_FogMinMaxDensity_MinMaxDepth`, 
+compute two fog vales at the same time and then using more data for upscaling will reduce visual artefacts.<br>
+But this will increase memory bandwidth on fog rendering step and after on upscale step.
+
+Earlier iterations on this approach gives worse performance results and I've decided not to move feather in that direction.
 
 ---
 
@@ -125,15 +142,17 @@ Benchmarks:
 |--------------------------------|----------|-----------|----------|
 | GPU frame time                 | ~8.545ms | ~10.550ms | ~2.004ms |
 | CPU frame time                 | ~1.875ms | ~2.261ms  | ~0.386ms |
-| HeightFogPass (ProfilerMarker) | -        | -         | ~3.794ms |
+| HeightFogPass (ProfilerMarker) | -        | -         | ~3.794ms | 
+| HeightFogPass (RenderDoc)      | -        | -         | ~1.514ms |
 
 Memory:
 - `_CameraDepthTexture_2392x1080_R32_SFloat_Tex2D` : ~9.85MB (10333440B)
 - `_CameraColorAttachmentA_2392x1080_B10G11R11_UFloatPack32_Tex2D` : ~9.85MB (10333440B)
 
 <details>
-<summary>TODO: Screenshots</summary>
-<img src="./Pictures/smf2/fog-on.png" width=50%/><img src="./Pictures/smf2/renderdoc.png" width=50%/>
+<summary>Screenshots</summary>
+<img src="./Pictures/cmf2/fog-on.png"/>
+<img src="./Pictures/cmf2/renderdoc.png"/>
 </details>
 
 **Samsung Galaxy S21 FE 5G** [[GSM Arena](https://www.gsmarena.com/samsung_galaxy_s21_fe_5g-10954.php)]
@@ -153,6 +172,7 @@ Benchmarks:
 | GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
 | CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
 | HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
+| HeightFogPass (RenderDoc)      | -        | -        | ~0.921ms |
 
 Memory:
 - `_CameraDepthTexture_2340x1080_R32_SFloat_Tex2D` : ~9.64MB (10108800B)
@@ -161,6 +181,7 @@ Memory:
 <details>
 <summary>Screenshots</summary>
 <img src="./Pictures/sgs21fe/fog-on.jpg" width=50%/><img src="./Pictures/sgs21fe/fog-on-alphablend.jpg" width=50%/>
+<img src="./Pictures/sgs21fe/renderdoc.png" width=50%/>
 </details>
 
 **Honor 400** [[GSM Arena](https://www.gsmarena.com/honor_400_5g-13799.php)]
@@ -177,9 +198,9 @@ Benchmarks:
 
 |                                | Fog Off  | Fog On   | Fog Time |
 |--------------------------------|----------|----------|----------|
-| GPU frame time                 | ~2,258ms | ~4,832ms | ~2,574ms |
-| CPU frame time                 | ~1,831ms | ~1,504ms | ~0,326ms |
-| HeightFogPass (ProfilerMarker) | -        | -        | ~0,942ms |
+| GPU frame time                 | ~6.033ms | ~7.098ms | ~1.065ms |
+| CPU frame time                 | ~1.478ms | ~1.912ms | ~0.434ms |
+| HeightFogPass (ProfilerMarker) | -        | -        | ~2.021ms |
 
 Memory:
 - `_CameraDepthTexture_2736x1264_R32_SFloat_Tex2D` : ~13.19MB (13833216B)
@@ -203,11 +224,11 @@ Benchmarks:
 - GeekBench: 3124 (v5.1)
 ```
 
-|                                | Fog Off  | Fog On   | Fog Time |
-|--------------------------------|----------|----------|----------|
-| GPU frame time                 | ~3,784ms | ~6,455ms | ~2,671ms |
-| CPU frame time                 | ~1,804ms | ~1,967ms | ~0,163ms |
-| HeightFogPass (ProfilerMarker) | -        | -        | -        |
+|                       | Fog Off  | Fog On   | Fog Time |
+|-----------------------|----------|----------|----------|
+| GPU frame time        | ~3,784ms | ~6,455ms | ~2,671ms |
+| CPU frame time        | ~1,804ms | ~1,967ms | ~0,163ms |
+| HeightFogPass (XCode) | -        | -        | ~0.952ms |
 
 Memory:
 - `_CameraDepthTexture_2160x1620_R32_SFloat_Tex2D` : ~13.35MB (13996800B)
@@ -262,12 +283,10 @@ Uses late ZS update: false
 Reads color buffer: false
 ```
 
-
-
-
 ---
-# OLD
----
+
+<details>
+<summary>Draft</summary>
 
 ## Details:
 ### Queue and Transparency
@@ -303,3 +322,4 @@ So I decided to keep both variants: `Manual Blend` and `AlphaBlend`, but use it 
 
 ---
 
+</details>
