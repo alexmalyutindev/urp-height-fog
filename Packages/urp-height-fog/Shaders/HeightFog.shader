@@ -3,7 +3,7 @@ Shader "Hidden/HeightFog"
     Properties {}
     HLSLINCLUDE
     #pragma target 3.5
-    #pragma prefer_hlslcc gles
+    #pragma prefer_hlslcc gles metal
 
     #pragma vertex Vertex
     #pragma fragment Fragment
@@ -128,8 +128,7 @@ Shader "Hidden/HeightFog"
 
                 if (cameraPositionWS_Y > planeY && positionWS_Y > planeY)
                 {
-                    clip(-1.0f);
-                    return 0.0h;
+                    discard;
                 }
 
                 half fogFactor = ComputeFogDensity(fogThickness * density);
