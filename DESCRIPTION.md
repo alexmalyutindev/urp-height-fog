@@ -97,7 +97,9 @@ This to factors multiplied into final fog density.
 
 ---
 
-## Direction for improvements aka. alternative rendering optimization (low-res rendering)
+## Direction for Improvements
+
+### Low-res Rendering with Bilateral Upscaling 
 
 One of ideas, that comes naturally, is to render fog in to smaller target, and upscale it later - 
 that reduces arithmetic cost but introduces additional memory overhead and upscaling artifacts.
@@ -112,6 +114,14 @@ compute two fog vales at the same time and then using more data for upscaling wi
 But this will increase memory bandwidth on fog rendering step and after on upscale step.
 
 Earlier iterations on this approach gives worse performance results, and I've decided not to move feather in that direction.
+
+### 1/2-Resolution Target with RGBA-Packed Densities
+
+In this approach is base on fog calculation nature, most of the math if fragment pass is scalar (see [HeightFog.shader](./Packages/urp-height-fog/Shaders/HeightFog.shader)),
+and we can perform 4 rays (2x2 block) computation simultaneously in a single fragment invocation!
+The results would be stored in a 1/2-resolution `_FogDensities` buffer, with each RGBA channel representing one fog density sample.  
+During upscaling step there is only one texture sample per pixel. Because of `_FogDensities` structure, 
+it potentially might be more cache friendly, because neighbouring pixels are sharing same texel.
 
 ---
 
