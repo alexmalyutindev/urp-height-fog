@@ -4,6 +4,7 @@
   "displayName": "URP Height Fog",
   "unity": "6000.0",
   "dependencies": {
-    "com.unity.render-pipelines.universal" : "17.0.4"
-  }
+    "com.unity.render-pipelines.universal": "17.0.4"
+  },
+  "description": "Mobile-optimized Screen-Space Height + Distance Fog effect for URP."
 }
