@@ -42,11 +42,11 @@ efficient full-screen pass with minimal GPU overhead.
 
 ### Alternative Approaches Considered
 
-| Approach                                    | Pros                           | Cons                                     | Decision       |
-|---------------------------------------------|--------------------------------|------------------------------------------|----------------|
-| Current: Single pass before transparents    | Minimal cost, clean opaque fog | No transparency support                  | ✅ **Selected** |
-| Per-object fog                              | Transparency support           | More costly and has blending artefacts   | ❌ Rejected     |
-| Dual-depth buffer (_FogDensity_MinMaxDepth) | Transparency support           | More costly and require ~+10MB of memory | ❌ Rejected     |
+| Approach                                    | Pros                           | Cons                                         | Decision       |
+|---------------------------------------------|--------------------------------|----------------------------------------------|----------------|
+| Current: Single pass before transparents    | Minimal cost, clean opaque fog | No transparency support                      | ✅ **Selected** |
+| Per-object fog (like Unity's default fog)   | Transparency support           | More costly and has alpha blending artefacts | ❌ Rejected     |
+| Dual-depth buffer (_FogDensity_MinMaxDepth) | Transparency support           | More costly and require ~+10MB of memory     | ❌ Rejected     |
 
 ---
 
@@ -93,11 +93,7 @@ This to factors multiplied into final fog density.
 
 ---
 
-
-
----
-
-## Direction for Improvements
+## Directions for Improvements
 
 ### Low-res Rendering with Bilateral Upscaling 
 
@@ -105,23 +101,30 @@ One of ideas, that comes naturally, is to render fog in to smaller target, and u
 that reduces arithmetic cost but introduces additional memory overhead and upscaling artifacts.
 
 This approach requires two new low-res buffer: `_MaxSceneDepth` and `_FogDensity_MaxDepth`. This targets can be tiny (ex. 1/4 of frame buffer), 
-but still adds memory footprint and preparing them, also adds computation cost.<br>
+but still adds memory footprint and preparing them, also adds computation cost.  
 And also there is a cost of Depth-Guided Upscaling (at least 5 texture samples in full resolution), 
-that often presents visual bugs around 'thin' depth pixels ('cus of loss of detalization in DepthBuffer after downscale).<br>
+that often presents visual bugs around 'thin' depth pixels ('cus of loss of detalization in DepthBuffer after downscale).
 
 There is an improvement to this approach is to use `_MinMaxSceneDepth` and `_FogMinMaxDensity_MinMaxDepth`, 
-compute two fog vales at the same time and then using more data for upscaling will reduce visual artefacts.<br>
-But this will increase memory bandwidth on fog rendering step and after on upscale step.
+compute two fog vales at the same time and then using more data for upscaling will reduce visual artefacts.  
+But this will increase memory bandwidth on fog rendering step and after on upscale step.  
 
 Earlier iterations on this approach gives worse performance results, and I've decided not to move feather in that direction.
 
 ### 1/2-Resolution Target with RGBA-Packed Densities
 
 In this approach is base on fog calculation nature, most of the math if fragment pass is scalar (see [HeightFog.shader](./Packages/urp-height-fog/Shaders/HeightFog.shader)),
-and we can perform 4 rays (2x2 block) computation simultaneously in a single fragment invocation!
+and we can perform 4 rays (2x2 block) computation simultaneously in a single fragment invocation!  
 The results would be stored in a 1/2-resolution `_FogDensities` buffer, with each RGBA channel representing one fog density sample.  
 During upscaling step there is only one texture sample per pixel. Because of `_FogDensities` structure, 
 it potentially might be more cache friendly, because neighbouring pixels are sharing same texel.
+
+### Per-Vertex Fog in Object Shader
+
+Another possible optimization is to compute the fog factor in the vertex stage of the object’s shader instead of in a full-screen pass.
+This approach significantly reduces per-fragment cost, making it suitable for low-end devices.  
+The main drawback is potential visual artifacts due to vertex-to-fragment interpolation, 
+especially on large polygons or when the fog density changes rapidly with depth or height.  
 
 ---
 
